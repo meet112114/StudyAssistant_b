@@ -1,6 +1,10 @@
 import express from "express";
 import cors from "cors";
 import authRoutes from './routes/auth.js';
+import subjectRoutes from './routes/subject.js';
+import resourceRoutes from './routes/resource.js';
+import path from 'path';
+
 const app  = express()
 
 app.use(cors())
@@ -10,6 +14,12 @@ app.get('/' , (req , res )=>{
     res.json({message:"App is running "})
 })
 
-app.use('/auth',authRoutes)
+app.use('/auth', authRoutes)
+app.use('/subject', subjectRoutes)
+app.use('/subjects', subjectRoutes)
+app.use('/resource', resourceRoutes)
+
+
+app.use('/resources', express.static(path.join(process.cwd(), 'resources')));
 
 export default app ;
