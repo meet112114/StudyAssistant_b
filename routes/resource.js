@@ -1,6 +1,6 @@
 import express from "express";
 import multer from "multer";
-import { addResource, getResources } from "../controllers/resourceControllers.js";
+import { addResource, getResources, getResourceById, getSummary, getQuiz } from "../controllers/resourceControllers.js";
 import verifyAuth from "../middlewares/verifyAuth.js";
 
 const router = express.Router();
@@ -22,5 +22,9 @@ const upload = multer({ storage });
 
 router.post("/", verifyAuth, upload.single("resourceFile"), addResource);
 router.get("/:subjectId", verifyAuth, getResources);
+
+router.get("/item/:id", verifyAuth, getResourceById);
+router.get("/item/:id/summary", verifyAuth, getSummary);
+router.get("/item/:id/quiz", verifyAuth, getQuiz);
 
 export default router;

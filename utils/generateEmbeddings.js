@@ -13,7 +13,6 @@ import Resource from "../models/Resource.js";
 const CHUNK_SIZE = 1000;
 const CHUNK_OVERLAP = 200;
 
-//  Hugging Face's 
 export const fetchHuggingFaceEmbeddings = async (textChunks) => {
     const hfToken = process.env.HUGGINGFACE_API_KEY;
 
@@ -48,7 +47,6 @@ export const extractTextFromFile = async (filePath, fileType) => {
                 await parser.destroy();
                 return result.text;
             } else {
-                // Fallback incase object is directly the wrapper
                 const result = await pdfParseLib(fileBuffer);
                 return result.text;
             }

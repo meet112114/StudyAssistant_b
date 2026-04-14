@@ -22,7 +22,7 @@ const EmbeddingSchema = new mongoose.Schema(
       required: true,
     },
     embeddingVector: {
-      type: [Number], // Array of floats representing the embedding
+      type: [Number],
       required: true,
     },
   },

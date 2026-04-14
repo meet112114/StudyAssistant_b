@@ -2,7 +2,10 @@ import fs from "fs";
 import path from "path";
 import Resource from "../models/Resource.js";
 import Subject from "../models/Subject.js";
+import Summary from "../models/Summary.js";
+import Quiz from "../models/Quiz.js";
 import { processAndCreateEmbeddings } from "../utils/generateEmbeddings.js";
+import { generateSummaryForResource, generateQuizForResource } from "../utils/generateAiContent.js";
 
 const resDir = path.join(process.cwd(), "resources");
 if (!fs.existsSync(resDir)) {
@@ -46,7 +49,6 @@ const addResource = async (req, res) => {
 
         await Subject.findByIdAndUpdate(subjectId, { $push: { resources: resource._id } });
 
-        // Kick off asynchronous embedding generation
         processAndCreateEmbeddings(resource);
 
         res.status(201).json(resource);
@@ -68,4 +70,61 @@ const getResources = async (req, res) => {
     }
 };
 
-export { addResource, getResources };
+const getResourceById = async (req, res) => {
+    try {
+        const resource = await Resource.findOne({ _id: req.params.id, user: req.user._id }).populate("subject", "name").lean();
+        if (!resource) return res.status(404).json({ message: "Resource not found" });
+
+        const summaryItem = await Summary.findOne({ resource: resource._id });
+        const quizItem = await Quiz.findOne({ resource: resource._id });
+
+        res.json({
+            ...resource,
+            summaryData: summaryItem ? summaryItem.content : null,
+            quizData: quizItem ? quizItem.questions : null
+        });
+    } catch (err) {
+        console.error("Error fetching resource:", err);
+        res.status(500).json({ message: "Server error fetching resource" });
+    }
+};
+
+const getSummary = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const resource = await Resource.findOne({ _id: id, user: req.user._id });
+        if (!resource) return res.status(404).json({ message: "Resource not found" });
+
+        let summaryItem = await Summary.findOne({ resource: id });
+        if (!summaryItem) {
+            const content = await generateSummaryForResource(resource);
+            summaryItem = new Summary({ resource: id, content });
+            await summaryItem.save();
+        }
+        res.json(summaryItem);
+    } catch (err) {
+        console.error("Error generating/fetching summary:", err);
+        res.status(500).json({ message: "Server error generating summary. Check API limits or size." });
+    }
+};
+
+const getQuiz = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const resource = await Resource.findOne({ _id: id, user: req.user._id });
+        if (!resource) return res.status(404).json({ message: "Resource not found" });
+
+        let quizItem = await Quiz.findOne({ resource: id });
+        if (!quizItem) {
+            const questions = await generateQuizForResource(resource);
+            quizItem = new Quiz({ resource: id, questions });
+            await quizItem.save();
+        }
+        res.json(quizItem);
+    } catch (err) {
+        console.error("Error generating/fetching quiz:", err);
+        res.status(500).json({ message: "Server error generating quiz. Check API limits or size." });
+    }
+};
+
+export { addResource, getResources, getResourceById, getSummary, getQuiz };
