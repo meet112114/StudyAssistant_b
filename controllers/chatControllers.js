@@ -154,7 +154,7 @@ ${contextBlock}`;
         const maxTokens = answerLength === "long" ? 800 : answerLength === "short" ? 200 : 500;
         const temperature = tone === "academic" ? 0.3 : 0.6;
 
-        const reply = await chatCompletion(llmMessages, { maxTokens, temperature });
+        const reply = await chatCompletion(llmMessages, { maxTokens, temperature, userId: req.user._id });
 
         res.json({
             reply,

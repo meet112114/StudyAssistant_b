@@ -1,41 +1,70 @@
 
-/**
- * llmProvider.js
- * ─────────────────────────────────────────────────────────────────────────────
- * Unified LLM adapter for Study Assistant backend.
- *
- * Supported providers (set LLM_PROVIDER in .env):
- *   "hf"     → Hugging Face Inference API  (requires HUGGINGFACE_API_KEY)
- *   "openai" → OpenAI API                  (requires OPENAI_API_KEY)
- *   "ollama" → Local Ollama server         (requires Ollama running on localhost)
- *
- * Usage:
- *   import { chatCompletion } from "../utils/llmProvider.js";
- *   const reply = await chatCompletion(messages, { maxTokens, temperature });
- *
- * `messages` must be an array of { role, content } objects (OpenAI format).
- * ─────────────────────────────────────────────────────────────────────────────
- */
-
-/* ── Provider / Model config ─────────────────────────────────────────────────
-   NOTE: All env vars are read INSIDE functions (not at module level) so that
-   dotenv.config() in server.js has already run before these values are used.
-──────────────────────────────────────────────────────────────────────────── */
-const getProvider   = () => (process.env.LLM_PROVIDER  || "hf").trim().toLowerCase();
-const getHFModel    = () => (process.env.HF_MODEL      || "google/gemma-3-27b-it").trim();
-const getOpenAIModel= () => (process.env.OPENAI_MODEL  || "gpt-4o-mini").trim();
-const getOllamaModel= () => (process.env.OLLAMA_MODEL  || "gemma4").trim();
-const getOllamaURL  = () => (process.env.OLLAMA_URL    || "http://localhost:11434/api/chat").trim();
-
-// Thinking models (e.g. gemma4) spend extra tokens on chain-of-thought before
-// writing the actual response. Multiply num_predict so the thinking phase does
-// not exhaust the entire token budget. Override via OLLAMA_TOKEN_MULTIPLIER.
+const getProvider = () =>
+  (process.env.LLM_PROVIDER || "hf").trim().toLowerCase();
+const getHFModel = () =>
+  (process.env.HF_MODEL || "google/gemma-3-27b-it").trim();
+const getOpenAIModel = () => (process.env.OPENAI_MODEL || "gpt-4o-mini").trim();
+const getOllamaModel = () => (process.env.OLLAMA_MODEL || "gemma4").trim();
+const getOllamaURL = () =>
+  (process.env.OLLAMA_URL || "http://localhost:11434/api/chat").trim();
 const getOllamaTokenMultiplier = () =>
   parseInt(process.env.OLLAMA_TOKEN_MULTIPLIER || "4", 10);
 
+export const CREDIT_RATE = {
+  USD_TO_INR: 93,
+  ACCOUNT_OVERHEAD: 1.2, 
+  PROFIT_MARGIN: 0.4, 
+
+  PROVIDERS: {
+    openai: {
+      INPUT_COST_PER_TOKEN_USD: 0.00000015,
+      OUTPUT_COST_PER_TOKEN_USD: 0.0000006,
+    },
+    hf: {
+      INPUT_COST_PER_TOKEN_USD: 0.0000001,
+      OUTPUT_COST_PER_TOKEN_USD: 0.0000001,
+    },
+    ollama: {
+      INPUT_COST_PER_TOKEN_USD: 0.00000015,
+      OUTPUT_COST_PER_TOKEN_USD: 0.0000006,
+    },
+  },
+};
+
+/**
+ * calculateCreditsUsed — converts token usage to integer credits.
+ * Returns 0 for providers with no cost (ollama).
+ *
+ * @param {string} provider
+ * @param {number} inputTokens
+ * @param {number} outputTokens
+ * @returns {{ creditsUsed: number, totalCostRs: number }}
+ */
+export const calculateCreditsUsed = (provider, inputTokens, outputTokens) => {
+  const providerRates = CREDIT_RATE.PROVIDERS[provider];
+
+  // Free provider (ollama) — skip deduction
+  if (!providerRates) return { creditsUsed: 0, totalCostRs: 0 };
+
+  const { USD_TO_INR, ACCOUNT_OVERHEAD, PROFIT_MARGIN } = CREDIT_RATE;
+  const { INPUT_COST_PER_TOKEN_USD, OUTPUT_COST_PER_TOKEN_USD } = providerRates;
+
+  const multiplier = ACCOUNT_OVERHEAD * (1 + PROFIT_MARGIN); // e.g. 1.2 × 1.4 = 1.68
+
+  const inputCostRs =
+    inputTokens * INPUT_COST_PER_TOKEN_USD * USD_TO_INR * multiplier;
+  const outputCostRs =
+    outputTokens * OUTPUT_COST_PER_TOKEN_USD * USD_TO_INR * multiplier;
+  const totalCostRs = inputCostRs + outputCostRs;
+
+  // 1 Rs = 500 credits  →  multiply by 500, always round up
+  const creditsUsed = Math.ceil(totalCostRs * 500);
+
+  return { creditsUsed, totalCostRs: +totalCostRs.toFixed(6) };
+};
+
 /* ── Internal helpers ─────────────────────────────────────────────────────── */
 
-/** Hugging Face via @huggingface/inference chatCompletion */
 const callHF = async (messages, maxTokens, temperature) => {
   const { HfInference } = await import("@huggingface/inference");
   const hf = new HfInference(process.env.HUGGINGFACE_API_KEY);
@@ -47,10 +76,18 @@ const callHF = async (messages, maxTokens, temperature) => {
     temperature,
   });
 
-  return result.choices[0].message.content.trim();
+  return {
+    content: result.choices[0].message.content.trim(),
+    usage: {
+      inputTokens: result.usage?.prompt_tokens || 0,
+      outputTokens: result.usage?.completion_tokens || 0,
+    },
+  };
+  
+  console.log("Input token : ", usage.inputTokens);
+  console.log("Output token : ", usage.outputTokens);
 };
 
-/** OpenAI via the official `openai` npm package */
 const callOpenAI = async (messages, maxTokens, temperature) => {
   const { default: OpenAI } = await import("openai");
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -62,28 +99,39 @@ const callOpenAI = async (messages, maxTokens, temperature) => {
     temperature,
   });
 
-  return result.choices[0].message.content.trim();
+  return {
+    content: result.choices[0].message.content.trim(),
+    usage: {
+      inputTokens: result.usage?.prompt_tokens || 0,
+      outputTokens: result.usage?.completion_tokens || 0,
+    },
+  };
+  
+  console.log("Input token : ", usage.inputTokens);
+  console.log("Output token : ", usage.outputTokens);
 };
 
-/** Ollama local server (/api/chat endpoint) */
-const callOllama = async (messages, maxTokens, temperature, jsonMode = false) => {
-  // Thinking models (gemma4, etc.) consume tokens on their chain-of-thought
-  // BEFORE writing the actual response. Multiply the budget so content isn't empty.
+const callOllama = async (
+  messages,
+  maxTokens,
+  temperature,
+  format = false,
+) => {
   const effectiveTokens = maxTokens * getOllamaTokenMultiplier();
 
   const body = {
     model: getOllamaModel(),
     messages,
     stream: false,
-    options: {
-      temperature,
-      num_predict: effectiveTokens,
-    },
+    options: { temperature, num_predict: effectiveTokens },
   };
 
-  // Ollama's native JSON mode — constrains the token sampler to emit only valid
-  // JSON, which is more reliable than prompt engineering alone.
-  if (jsonMode) body.format = "json";
+  // format can be: false (none), true/"json" (freeform JSON), or a schema object (structured output)
+  if (format && typeof format === "object") {
+    body.format = format; // Pass JSON schema directly to Ollama
+  } else if (format) {
+    body.format = "json";
+  }
 
   const response = await fetch(getOllamaURL(), {
     method: "POST",
@@ -97,28 +145,78 @@ const callOllama = async (messages, maxTokens, temperature, jsonMode = false) =>
   }
 
   const data = await response.json();
+  const content = (data.message?.content || "").trim();
+  const thinking = (data.message?.thinking || "").trim();
+  const usage = {
+    inputTokens: data.prompt_eval_count || 0,
+    outputTokens: data.eval_count || 0,
+  };
 
-  // Prefer the final content; fall back to thinking if the model ran out of
-  // tokens before writing a formal response (done_reason === "length").
-  const content   = (data.message?.content   || "").trim();
-  const thinking  = (data.message?.thinking  || "").trim();
-
-  if (content) return content;
+  console.log("Input token : ", usage.inputTokens);
+  console.log("Output token : ", usage.outputTokens);
+  if (content) return { content, usage };
 
   if (thinking) {
     console.warn(
       `[Ollama] done_reason="${data.done_reason}" — content was empty, ` +
-      `using thinking field as response. Consider raising OLLAMA_TOKEN_MULTIPLIER ` +
-      `(currently ${getOllamaTokenMultiplier()}) in .env.`
+        `using thinking field as response. Consider raising OLLAMA_TOKEN_MULTIPLIER ` +
+        `(currently ${getOllamaTokenMultiplier()}) in .env.`,
     );
-    return thinking;
+    return { content: thinking, usage };
   }
 
   console.error("[Ollama] Full raw response:", JSON.stringify(data, null, 2));
   throw new Error(
     `Ollama returned empty content AND empty thinking. Model: "${getOllamaModel()}". ` +
-    `Ensure it is pulled and running correctly.`
+      `Ensure it is pulled and running correctly.`,
   );
+};
+
+/* ── Post-call bookkeeping (fire-and-forget) ──────────────────────────────── */
+
+const updateUserStats = async (userId, provider, usage) => {
+  try {
+    const { default: User } = await import("../models/Users.js");
+
+    // 1. Always update raw token counters
+    await User.updateOne(
+      { _id: userId },
+      {
+        $inc: {
+          "aiUsage.inputTokens": usage.inputTokens || 0,
+          "aiUsage.outputTokens": usage.outputTokens || 0,
+        },
+      },
+    );
+
+    // 2. Deduct credits only for paid providers
+    const { creditsUsed, totalCostRs } = calculateCreditsUsed(
+      provider,
+      usage.inputTokens,
+      usage.outputTokens,
+    );
+
+    if (creditsUsed > 0) {
+      const user = await User.findById(userId);
+      if (user) {
+        // Deduct silently — don't crash the response if balance somehow went negative
+        if (user.credits.balance >= creditsUsed) {
+          await user.deductCredits(
+            creditsUsed,
+            totalCostRs,
+            `${provider.toUpperCase()} · ${usage.inputTokens}in / ${usage.outputTokens}out tokens`,
+          );
+        } else {
+          console.warn(
+            `[Credits] User ${userId} has insufficient credits (balance: ${user.credits.balance}, required: ${creditsUsed})`,
+          );
+        }
+      }
+    }
+  } catch (err) {
+    // Never crash the main response due to bookkeeping failure
+    console.error("[LLM] updateUserStats failed:", err.message);
+  }
 };
 
 /* ── Public API ───────────────────────────────────────────────────────────── */
@@ -128,37 +226,47 @@ const callOllama = async (messages, maxTokens, temperature, jsonMode = false) =>
  *
  * @param {Array<{role: string, content: string}>} messages
  * @param {object} [opts]
- * @param {number} [opts.maxTokens=500]
- * @param {number} [opts.temperature=0.6]
- * @param {boolean} [opts.jsonMode=false]  Force JSON output (Ollama only for now)
- * @returns {Promise<string>} The assistant's reply text
+ * @param {number}        [opts.maxTokens=500]
+ * @param {number}        [opts.temperature=0.6]
+ * @param {boolean|object} [opts.format=false]  — true for freeform JSON, or a JSON schema object for structured output
+ * @param {string}        [opts.userId]         — if provided, deducts credits + updates usage
+ * @returns {Promise<string>}
  */
 export const chatCompletion = async (messages, opts = {}) => {
-  const { maxTokens = 500, temperature = 0.6, jsonMode = false } = opts;
+  const { maxTokens = 500, temperature = 0.6, format = false, userId } = opts;
 
-  // Read env at call-time (dotenv.config() is guaranteed to have run by now)
   const provider = getProvider();
-
   console.log(`[LLM] Provider: ${provider.toUpperCase()}`);
 
+  let result;
   switch (provider) {
     case "hf":
       console.log(`[LLM] Model: ${getHFModel()}`);
-      return callHF(messages, maxTokens, temperature);
+      result = await callHF(messages, maxTokens, temperature);
+      break;
 
     case "openai":
       console.log(`[LLM] Model: ${getOpenAIModel()}`);
-      return callOpenAI(messages, maxTokens, temperature);
+      result = await callOpenAI(messages, maxTokens, temperature);
+      break;
 
     case "ollama":
       console.log(`[LLM] Model: ${getOllamaModel()}`);
-      return callOllama(messages, maxTokens, temperature, jsonMode);
+      result = await callOllama(messages, maxTokens, temperature, format);
+      break;
 
     default:
       throw new Error(
-        `[LLM] Unknown provider "${provider}". Set LLM_PROVIDER to "hf", "openai", or "ollama" in .env`
+        `[LLM] Unknown provider "${provider}". Set LLM_PROVIDER to "hf", "openai", or "ollama" in .env`,
       );
   }
+
+  // Fire-and-forget — don't await so the response isn't delayed
+  if (userId && result.usage) {
+    updateUserStats(userId, provider, result.usage);
+  }
+
+  return result.content;
 };
 
 /** Convenience: get active provider name at call-time */

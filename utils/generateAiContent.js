@@ -5,9 +5,102 @@ import { chatCompletion } from "./llmProvider.js";
 
 const MAX_TEXT_LENGTH = 15000;
 
-/* ===============================
-   SUMMARY
-================================= */
+const safeParseJsonArray = (raw) => {
+  console.log("[Quiz] Raw LLM output (first 500 chars):", raw.slice(0, 500));
+
+  // 1. Strip markdown code fences
+  let cleaned = raw.replace(/```(?:json)?\s*/gi, "").replace(/```/g, "").trim();
+
+  // 2. Remove trailing commas before ] or } (LLMs love these)
+  cleaned = cleaned.replace(/,\s*([}\]])/g, "$1");
+
+  // 3. Try to find and parse a top-level JSON array first
+  const arrStart = cleaned.indexOf("[");
+  if (arrStart !== -1) {
+    let arrEnd = cleaned.lastIndexOf("]");
+    let arrStr = arrEnd > arrStart
+      ? cleaned.slice(arrStart, arrEnd + 1)
+      : cleaned.slice(arrStart) + "]";
+
+    arrStr = arrStr.replace(/,\s*([}\]])/g, "$1");
+
+    try {
+      const result = JSON.parse(arrStr);
+      if (Array.isArray(result)) return result;
+    } catch { /* fall through */ }
+
+    // Progressive trim — remove incomplete last element up to 15 times
+    let attempt = arrStr;
+    for (let i = 0; i < 15; i++) {
+      const cut = attempt.lastIndexOf("},");
+      if (cut <= 0) break;
+      attempt = attempt.slice(0, cut + 1) + "]";
+      try {
+        const result = JSON.parse(attempt);
+        if (Array.isArray(result) && result.length > 0) {
+          console.warn(`[Quiz] Recovered array by trimming ${i + 1} element(s). Got ${result.length} items.`);
+          return result;
+        }
+      } catch { /* keep trimming */ }
+    }
+  }
+
+  const objStart = cleaned.indexOf("{");
+  if (objStart !== -1) {
+    let objEnd = cleaned.lastIndexOf("}");
+    let objStr = objEnd > objStart
+      ? cleaned.slice(objStart, objEnd + 1)
+      : cleaned.slice(objStart) + "}";
+
+    objStr = objStr.replace(/,\s*([}\]])/g, "$1");
+
+    const tryParseObj = (str) => {
+      const parsed = JSON.parse(str);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+
+      // (a) Single question object — wrap in array
+      if (parsed.question && (parsed.options || parsed.correctAnswer)) {
+        console.warn("[Quiz] Model returned a single question object — wrapping in array.");
+        return [parsed];
+      }
+
+      // (b) Keyed dict where values are question objects
+      const values = Object.values(parsed);
+      if (values.length > 0 && values.every(v => v && typeof v === "object" && !Array.isArray(v))) {
+        console.warn(`[Quiz] Model returned a keyed object — converted ${values.length} values to array.`);
+        return values;
+      }
+
+      return null;
+    };
+
+    // Try full object first
+    try {
+      const result = tryParseObj(objStr);
+      if (result) return result;
+    } catch { /* fall through */ }
+
+    // Progressive trim — remove last key:value pair up to 15 times
+    let attempt = objStr;
+    for (let i = 0; i < 15; i++) {
+      const cut = attempt.lastIndexOf("},");
+      if (cut <= 0) break;
+      attempt = attempt.slice(0, cut + 1) + "}";
+      try {
+        const result = tryParseObj(attempt);
+        if (result) {
+          console.warn(`[Quiz] Recovered object by trimming ${i + 1} pair(s). Got ${result.length} items.`);
+          return result;
+        }
+      } catch { /* keep trimming */ }
+    }
+  }
+
+  throw new Error(`safeParseJsonArray: Could not extract valid JSON. Raw (first 400 chars): ${raw.slice(0, 400)}`);
+};
+
+
+
 export const generateSummaryForResource = async (resourceDoc) => {
   const filePath = path.join(process.cwd(), resourceDoc.url);
 
@@ -31,7 +124,7 @@ Summary:`,
     },
   ];
 
-  return chatCompletion(messages, { maxTokens: 500, temperature: 0.5 });
+  return chatCompletion(messages, { maxTokens: 500, temperature: 0.5, userId: resourceDoc.user });
 };
 
 /* ===============================
@@ -48,107 +141,109 @@ export const generateQuizForResource = async (resourceDoc) => {
 
   const truncatedText = text.slice(0, MAX_TEXT_LENGTH);
 
+  
+  const quizSchema = {
+    type: "object",
+    properties: {
+      questions: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            question: { type: "string" },
+            options: {
+              type: "array",
+              items: { type: "string" },
+            },
+            correctAnswer: { type: "string" },
+          },
+          required: ["question", "options", "correctAnswer"],
+        },
+      },
+    },
+    required: ["questions"],
+  };
+
   const messages = [
     {
       role: "user",
-      content: `You are a JSON API. Your response must be ONLY a valid JSON array — no markdown, no explanations, no code fences, no extra text before or after the array.
+      content: `Create exactly 10 multiple-choice questions based on the following text.
 
-Create exactly 10 multiple-choice questions based on the text below.
-
-Each element of the array must follow this exact structure:
-{
-  "question": "Question text here?",
-  "options": ["Option A text", "Option B text", "Option C text", "Option D text"],
-  "correctAnswer": "Option A text"
-}
-
-Rules:
-- "options" must be an array of 4 plain strings (no letter prefixes like "A.", just the text).
-- "correctAnswer" must be the exact full string of the correct option.
-- Do NOT include any text outside the JSON array.
+Each question must have:
+- "question": the question text
+- "options": exactly 4 answer choices as strings
+- "correctAnswer": the exact text of the correct option
 
 Text:
 ${truncatedText}`,
     },
   ];
 
-  let result = await chatCompletion(messages, { maxTokens: 2000, temperature: 0.2, jsonMode: true });
+  const result = await chatCompletion(messages, {
+    maxTokens: 3000,
+    temperature: 0.2,
+    format: quizSchema,
+    userId: resourceDoc.user,
+  });
 
-  // Robustly extract the first [...] JSON array from the response,
-  // regardless of surrounding prose, markdown fences, or think-tags.
-  const arrayMatch = result.match(/\[[\s\S]*\]/);
-  if (!arrayMatch) {
-    throw new Error(`LLM did not return a JSON array. Response: ${result.slice(0, 300)}`);
+  // Parse the structured response
+  let parsed;
+  try {
+    parsed = JSON.parse(result);
+  } catch {
+    // Fallback: try safeParseJsonArray if direct parse fails
+    console.warn("[Quiz] Direct JSON.parse failed, trying safeParseJsonArray...");
+    parsed = safeParseJsonArray(result);
   }
 
-  const parsed = JSON.parse(arrayMatch[0]);
+  // Handle both { questions: [...] } wrapper and bare array [...]
+  let questions = Array.isArray(parsed) ? parsed : parsed?.questions;
+  if (!Array.isArray(questions)) {
+    // Last resort: if it's a single question object, wrap it
+    if (parsed?.question && parsed?.options) {
+      questions = [parsed];
+    } else {
+      throw new Error(`Unexpected quiz response shape: ${JSON.stringify(parsed).slice(0, 300)}`);
+    }
+  }
 
-  // Debug: log the first raw question so key names are visible in the console.
-  // Remove this log once the model output is stable.
-  console.log("[Quiz] First raw question from LLM:", JSON.stringify(parsed[0], null, 2));
+  console.log(`[Quiz] Got ${questions.length} questions from LLM`);
+  console.log("[Quiz] First question:", JSON.stringify(questions[0], null, 2));
 
-  // All known aliases LLMs use for the correct-answer field.
+  // Light normalization — handle correctAnswer aliases
   const CORRECT_ANSWER_ALIASES = [
-    "correctAnswer",   // camelCase  (what we ask for)
-    "correct_answer",  // snake_case (Gemma tends to use this)
-    "answer",
-    "correct",
-    "correctOption",
-    "correct_option",
-    "right_answer",
-    "rightAnswer",
+    "correctAnswer", "correct_answer", "answer", "correct",
+    "correctOption", "correct_option", "right_answer", "rightAnswer",
   ];
 
-  const normalized = parsed.map((q) => {
-    let options = q.options;
+  const normalized = questions.map((q) => {
+    if (!q || typeof q !== "object") return null;
 
-    // ── Resolve correctAnswer from any alias ──────────────────────────────────
+    const questionText = q.question || q.Question || q.text || "";
+    if (!questionText) return null;
+
+    let options = Array.isArray(q.options) ? q.options.map(String) : [];
+
     let correctAnswer;
     for (const alias of CORRECT_ANSWER_ALIASES) {
       if (q[alias] !== undefined && q[alias] !== null && q[alias] !== "") {
-        correctAnswer = q[alias];
+        correctAnswer = String(q[alias]);
         break;
       }
     }
 
-    // ── Normalise options object → array ──────────────────────────────────────
-    // Model sometimes returns { A: "...", B: "...", C: "...", D: "..." }
-    if (options && !Array.isArray(options) && typeof options === "object") {
-      const keys = Object.keys(options);
-      options = keys.map((k) => `${k}: ${options[k]}`);
-
-      // If correctAnswer is a single letter like 'A', map it to the full string
-      if (correctAnswer && correctAnswer.length === 1) {
-        const match = options.find((o) => o.startsWith(`${correctAnswer}:`));
-        if (match) correctAnswer = match;
-      }
-    }
-
-    // ── Normalise array elements to strings ───────────────────────────────────
-    if (Array.isArray(options)) {
-      options = options.map((o) => {
-        if (typeof o === "object" && o !== null) {
-          return Object.entries(o).map(([k, v]) => `${k}: ${v}`).join(", ");
-        }
-        return String(o);
-      });
-    }
-
-    // ── If correctAnswer is a letter index ('A','B','C','D'), resolve it ──────
-    if (correctAnswer && /^[A-Da-d]$/.test(String(correctAnswer).trim())) {
-      const letter = correctAnswer.trim().toUpperCase();
-      const idx = { A: 0, B: 1, C: 2, D: 3 }[letter];
-      if (options[idx] !== undefined) correctAnswer = options[idx];
-    }
-
-    // ── Absolute fallback: use first option so required field is never empty ──
-    if (!correctAnswer && Array.isArray(options) && options.length > 0) {
-      console.warn("[Quiz] Could not resolve correctAnswer for question:", q.question);
+    // Fallback: use first option
+    if (!correctAnswer && options.length > 0) {
+      console.warn("[Quiz] Missing correctAnswer for:", questionText);
       correctAnswer = options[0];
     }
 
-    return { question: q.question, options, correctAnswer };
-  });
+    return { question: questionText, options, correctAnswer };
+  }).filter(Boolean);
+
+  if (normalized.length === 0) {
+    throw new Error("Quiz generation failed: no valid questions extracted.");
+  }
 
   return normalized;
 };
