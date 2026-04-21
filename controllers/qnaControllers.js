@@ -477,3 +477,103 @@ export const generatePdfFromQna = async (req, res) => {
     res.status(500).json({ message: "Server error fetching public sets." });
   }
 };
+
+export const generatePdfFromQnaPrivate = async (req, res) => {
+  try {
+    const qnaSet = await QnaSet.findOne({ _id: req.params.id, user: req.user._id })
+      .populate("resources", "name type")
+      .populate("user", "name email")
+      .lean();
+
+    if (!qnaSet) return res.status(404).json({ message: "Set Not available" });
+
+    const doc = new PDFDocument({
+      margin: 50,
+      size: "A4",
+    });
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename=${qnaSet.title}.pdf`,
+    );
+
+    doc.pipe(res);
+
+    // Title
+    doc.fontSize(22).text(qnaSet.title, { align: "center" });
+    doc.moveDown();
+
+    doc
+      .fontSize(12)
+      .text(`Created By: ${qnaSet.user.name}`)
+      .text(`Email: ${qnaSet.user.email}`)
+      .text(`Total Questions: ${qnaSet.totalQuestions}`);
+
+    doc.moveDown();
+
+  qnaSet.questions.forEach((item, index) => {
+    doc.font("Helvetica-Bold").fontSize(14).fillColor("blue")
+       .text(`Q${index + 1}: ${item.question}`);
+
+    doc.moveDown(0.4);
+
+    const lines = (item.answer || "").split("\n");
+
+    lines.forEach((line) => {
+      let text = line.trim();
+      if (!text) return;
+
+      let isList = false;
+      if (text.startsWith("* ") || text.startsWith("- ")) {
+        text = text.replace(/^[*|-]\s*/, "");
+        isList = true;
+      }
+
+      const parts = text.split("**");
+
+      if (parts.length === 1) {
+        doc.font("Helvetica").fontSize(11).fillColor("black")
+           .text(isList ? `• ${text}` : text, {
+             indent: isList ? 15 : 0,
+             align: "left",
+             lineGap: 3
+           });
+      } else {
+        doc.fontSize(11).fillColor("black");
+        if (isList) {
+          parts[0] = `• ${parts[0]}`;
+        }
+        parts.forEach((part, i) => {
+          const isBold = i % 2 === 1;
+          const isLast = i === parts.length - 1;
+          const options = {
+            continued: !isLast,
+            align: "left",
+            lineGap: 3
+          };
+          if (i === 0 && isList) {
+            options.indent = 15;
+          }
+          doc.font(isBold ? "Helvetica-Bold" : "Helvetica").text(part, options);
+        });
+      }
+      doc.moveDown(0.3);
+    });
+
+    doc.moveDown();
+
+    doc.moveTo(50, doc.y)
+       .lineTo(550, doc.y)
+       .strokeColor("#cccccc")
+       .stroke();
+
+    doc.moveDown();
+  });
+
+    doc.end();
+  } catch (e) {
+    console.error("[QnA] generatePdfFromQnaPrivate error:", e);
+    res.status(500).json({ message: "Server error generating pdf." });
+  }
+};

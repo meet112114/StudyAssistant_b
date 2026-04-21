@@ -13,6 +13,7 @@ import {
   getPublicQnaSets,
   getPublicQnaSetById,
   generatePdfFromQna,
+  generatePdfFromQnaPrivate,
 } from "../controllers/qnaControllers.js";
 
 const router = express.Router();
@@ -28,6 +29,7 @@ router.get("/", verifyAuth, getQnaSets);
 router.get("/:id", verifyAuth, getQnaSetById);
 router.put("/:id", verifyAuth, updateQnaSet);
 router.delete("/:id", verifyAuth, deleteQnaSet);
+router.get("/pdf/:id", verifyAuth, generatePdfFromQnaPrivate);
 
 // ── Question management ───────────────────────────────────────────────────────
 router.post("/:id/questions", verifyAuth, addQuestions);
