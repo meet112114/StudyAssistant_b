@@ -10,7 +10,30 @@ import path from 'path';
 const app  = express()
 
 app.use(cors())
-app.use(express.json())
+const allowedOrigins = [
+  process.env.FRONTEND_URL,      
+  "http://localhost:3000",         
+  "http://localhost:5173",        
+].filter(Boolean);
+
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      // allow requests with no origin (Postman/mobile apps)
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      } else {
+        return callback(new Error("CORS not allowed"));
+      }
+    },
+    credentials: true,
+  })
+);
+
+
+app.use(express.json());
 
 app.get('/' , (req , res )=>{
     res.json({message:"App is running "})
