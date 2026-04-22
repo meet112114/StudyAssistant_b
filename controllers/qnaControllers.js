@@ -228,7 +228,10 @@ export const answerQuestion = async (req, res) => {
     });
   } catch (err) {
     console.error("[QnA] answerQuestion error:", err);
-    res.status(500).json({ message: "Server error answering question." });
+    const msg = err.message?.includes("Insufficient credits") 
+      ? err.message 
+      : "Server error answering question.";
+    res.status(500).json({ message: msg });
   }
 };
 
@@ -304,7 +307,10 @@ export const answerAllQuestions = async (req, res) => {
     });
   } catch (err) {
     console.error("[QnA] answerAllQuestions error:", err);
-    res.status(500).json({ message: "Server error running batch answer." });
+    const msg = err.message?.includes("Insufficient credits") 
+      ? err.message 
+      : "Server error running batch answer.";
+    res.status(500).json({ message: msg });
   }
 };
 

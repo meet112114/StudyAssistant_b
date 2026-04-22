@@ -163,6 +163,9 @@ ${contextBlock}`;
         });
     } catch (err) {
         console.error("Chat error:", err);
-        res.status(500).json({ message: "AI chat error. Please try again." });
+        const msg = err.message?.includes("Insufficient credits") 
+            ? err.message 
+            : "AI chat error. Please try again.";
+        res.status(500).json({ message: msg });
     }
 };

@@ -104,7 +104,10 @@ const getSummary = async (req, res) => {
         res.json(summaryItem);
     } catch (err) {
         console.error("Error generating/fetching summary:", err);
-        res.status(500).json({ message: "Server error generating summary. Check API limits or size." });
+        const msg = err.message?.includes("Insufficient credits") 
+            ? err.message 
+            : "Server error generating summary. Check API limits or size.";
+        res.status(500).json({ message: msg });
     }
 };
 
@@ -123,7 +126,10 @@ const getQuiz = async (req, res) => {
         res.json(quizItem);
     } catch (err) {
         console.error("Error generating/fetching quiz:", err);
-        res.status(500).json({ message: "Server error generating quiz. Check API limits or size." });
+        const msg = err.message?.includes("Insufficient credits") 
+            ? err.message 
+            : "Server error generating quiz. Check API limits or size.";
+        res.status(500).json({ message: msg });
     }
 };
 
