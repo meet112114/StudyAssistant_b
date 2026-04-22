@@ -209,18 +209,13 @@ const updateUserStats = async (userId, provider, usage) => {
     if (creditsUsed > 0) {
       const user = await User.findById(userId);
       if (user) {
-        // Deduct silently — don't crash the response if balance somehow went negative
-        if (user.credits.balance >= creditsUsed) {
-          await user.deductCredits(
-            creditsUsed,
-            totalCostRs,
-            `${provider.toUpperCase()} · ${usage.inputTokens}in / ${usage.outputTokens}out tokens`,
-          );
-        } else {
-          console.warn(
-            `[Credits] User ${userId} has insufficient credits (balance: ${user.credits.balance}, required: ${creditsUsed})`,
-          );
-        }
+        // We now deduct even if it brings the balance into negative.
+        // This ensures the transaction is recorded and the pre-check blocks them next time.
+        await user.deductCredits(
+          creditsUsed,
+          totalCostRs,
+          `${provider.toUpperCase()} · ${usage.inputTokens}in / ${usage.outputTokens}out tokens`,
+        );
       }
     }
   } catch (err) {
@@ -247,6 +242,22 @@ export const chatCompletion = async (messages, opts = {}) => {
 
   const provider = getProvider();
   console.log(`[LLM] Provider: ${provider.toUpperCase()}`);
+
+  // PRE-CHECK: Block generation if user has no credits (except for free providers)
+  if (userId && provider !== "ollama") {
+    try {
+      const { default: User } = await import("../models/Users.js");
+      const user = await User.findById(userId);
+      if (user && user.credits.balance <= 0) {
+        throw new Error("Insufficient credits. Please recharge your account.");
+      }
+    } catch (err) {
+      if (err.message.includes("Insufficient credits")) {
+        throw err; // Actually abort the LLM request
+      }
+      console.error("[LLM] Pre-check failed:", err.message);
+    }
+  }
 
   let result;
   switch (provider) {

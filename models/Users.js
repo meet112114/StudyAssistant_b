@@ -104,9 +104,8 @@ UserSchema.methods.deductCredits = async function (tokensUsed, amountInRs, descr
     amountInRs = tokensUsed / 500;
   }
 
-  if (this.credits.balance < tokensUsed) {
-    throw new Error("Insufficient credits");
-  }
+  // We now allow balance to go negative so the transaction is recorded.
+  // The pre-check in llmProvider.js will prevent future generations.
 
   this.credits.balance -= tokensUsed;
   this.credits.totalUsed += tokensUsed;
