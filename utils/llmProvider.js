@@ -76,16 +76,26 @@ const callHF = async (messages, maxTokens, temperature) => {
     temperature,
   });
 
+  let inputTokens = result.usage?.prompt_tokens || 0;
+  if (!inputTokens) {
+    const promptString = messages.map(m => m.content).join(" ");
+    inputTokens = Math.ceil(promptString.length / 4);
+  }
+
+  const content = result.choices[0].message.content || "";
+  let outputTokens = result.usage?.completion_tokens || 0;
+  if (!outputTokens) {
+    outputTokens = Math.ceil(content.length / 4);
+  }
+
+  const usage = { inputTokens, outputTokens };
+  console.log("[HF] Input tokens: ", usage.inputTokens, "(estimated if no usage object)");
+  console.log("[HF] Output tokens: ", usage.outputTokens, "(estimated if no usage object)");
+
   return {
-    content: result.choices[0].message.content.trim(),
-    usage: {
-      inputTokens: result.usage?.prompt_tokens || 0,
-      outputTokens: result.usage?.completion_tokens || 0,
-    },
+    content: content.trim(),
+    usage,
   };
-  
-  console.log("Input token : ", usage.inputTokens);
-  console.log("Output token : ", usage.outputTokens);
 };
 
 const callOpenAI = async (messages, maxTokens, temperature) => {
