@@ -52,7 +52,12 @@ const addResource = async (req, res) => {
                     type: 'upload',
                     ...(type === 'pdf' && { format: 'pdf' })
                 });
-                finalUrl = result.secure_url;
+                
+                // Cloudinary blocks PDF delivery by default for security. 
+                // Generating a Signed URL permanently bypasses this restriction.
+                finalUrl = type === 'pdf' 
+                    ? cloudinary.url(result.public_id, { secure: true, sign_url: true, resource_type: 'image', format: 'pdf' })
+                    : result.secure_url;
                 
                 // Optionally remove local file after upload to save space
                 fs.unlinkSync(req.file.path);
