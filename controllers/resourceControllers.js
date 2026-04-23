@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import cloudinary from "../configs/cloudinary.js";
 import Resource from "../models/Resource.js";
 import Subject from "../models/Subject.js";
 import Summary from "../models/Summary.js";
@@ -36,13 +37,35 @@ const addResource = async (req, res) => {
             return res.status(400).json({ message: "Unsupported file type. Only pdf, docx, txt allowed." });
         }
 
+        let finalUrl = `/resources/${req.file.filename}`;
+        
+        const isProd = process.env.NODE_ENV === 'production' || (req.hostname !== 'localhost' && req.hostname !== '127.0.0.1');
+
+        if (isProd) {
+            try {
+                // resource_type: "raw" handles both pdf and docx files
+                const result = await cloudinary.uploader.upload(req.file.path, {
+                    resource_type: "raw",
+                    folder: "study_assistant_resources",
+                    public_id: req.file.filename
+                });
+                finalUrl = result.secure_url;
+                
+                // Optionally remove local file after upload to save space
+                fs.unlinkSync(req.file.path);
+            } catch (cloudErr) {
+                console.error("Cloudinary upload failed:", cloudErr);
+                // Fallback to local if cloud fails
+            }
+        }
+
         const resource = new Resource({
             name: req.file.originalname,
             user: req.user._id,
             subject: subjectId,
             type,
             size: req.file.size,
-            url: `/resources/${req.file.filename}`
+            url: finalUrl
         });
 
         await resource.save();

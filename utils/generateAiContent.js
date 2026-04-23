@@ -102,9 +102,12 @@ const safeParseJsonArray = (raw) => {
 
 
 export const generateSummaryForResource = async (resourceDoc) => {
-  const filePath = path.join(process.cwd(), resourceDoc.url);
+  let targetPath = resourceDoc.url;
+  if (!targetPath.startsWith("http://") && !targetPath.startsWith("https://")) {
+    targetPath = path.join(process.cwd(), targetPath);
+  }
 
-  let text = await extractTextFromFile(filePath, resourceDoc.type);
+  let text = await extractTextFromFile(targetPath, resourceDoc.type);
 
   if (!text || text.trim().length === 0) {
     throw new Error("Could not extract text.");
@@ -131,9 +134,12 @@ Summary:`,
    QUIZ
 ================================= */
 export const generateQuizForResource = async (resourceDoc, difficulty = 'medium', numQuestions = 10) => {
-  const filePath = path.join(process.cwd(), resourceDoc.url);
+  let targetPath = resourceDoc.url;
+  if (!targetPath.startsWith("http://") && !targetPath.startsWith("https://")) {
+    targetPath = path.join(process.cwd(), targetPath);
+  }
 
-  let text = await extractTextFromFile(filePath, resourceDoc.type);
+  let text = await extractTextFromFile(targetPath, resourceDoc.type);
 
   if (!text || text.trim().length === 0) {
     throw new Error("Could not extract text.");

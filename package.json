@@ -12,6 +12,7 @@
   "dependencies": {
     "@huggingface/inference": "^4.13.15",
     "bcrypt": "^6.0.0",
+    "cloudinary": "^2.9.0",
     "cors": "^2.8.6",
     "dotenv": "^17.4.0",
     "express": "^5.2.1",
@@ -22,6 +23,7 @@
     "multer": "^2.1.1",
     "openai": "^6.34.0",
     "pdf-parse": "^2.4.5",
-    "pdfkit": "^0.18.0"
+    "pdfkit": "^0.18.0",
+    "streamifier": "^0.1.1"
   }
 }

@@ -35,9 +35,17 @@ export const fetchHuggingFaceEmbeddings = async (textChunks) => {
     }
 };
 
-export const extractTextFromFile = async (filePath, fileType) => {
+export const extractTextFromFile = async (filePathOrUrl, fileType) => {
     try {
-        const fileBuffer = fs.readFileSync(filePath);
+        let fileBuffer;
+        if (filePathOrUrl.startsWith("http://") || filePathOrUrl.startsWith("https://")) {
+            const response = await fetch(filePathOrUrl);
+            if (!response.ok) throw new Error(`Failed to fetch remote file: ${response.statusText}`);
+            const arrayBuffer = await response.arrayBuffer();
+            fileBuffer = Buffer.from(arrayBuffer);
+        } else {
+            fileBuffer = fs.readFileSync(filePathOrUrl);
+        }
 
         if (fileType === "pdf") {
             const { PDFParse } = pdfParseLib;
@@ -59,7 +67,7 @@ export const extractTextFromFile = async (filePath, fileType) => {
             console.warn(`Unsupported extraction type: ${fileType}`);
         }
     } catch (error) {
-        console.error(`Error reading/extracting file: ${filePath}`, error);
+        console.error(`Error reading/extracting file: ${filePathOrUrl}`, error);
     }
     return "";
 };
@@ -81,9 +89,12 @@ export const processAndCreateEmbeddings = async (resourceDoc) => {
     try {
         console.log(`Starting real embedding generation for resource: ${resourceDoc.name}`);
 
-        const filePath = path.join(process.cwd(), resourceDoc.url);
+        let targetPath = resourceDoc.url;
+        if (!targetPath.startsWith("http://") && !targetPath.startsWith("https://")) {
+            targetPath = path.join(process.cwd(), targetPath);
+        }
 
-        const extractedText = await extractTextFromFile(filePath, resourceDoc.type);
+        const extractedText = await extractTextFromFile(targetPath, resourceDoc.type);
         if (!extractedText || extractedText.trim().length === 0) {
             console.warn("No text could be extracted from this resource.");
             return;
