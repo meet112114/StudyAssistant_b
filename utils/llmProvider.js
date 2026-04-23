@@ -240,7 +240,7 @@ const updateUserStats = async (userId, provider, usage) => {
  * @returns {Promise<string>}
  */
 export const chatCompletion = async (messages, opts = {}) => {
-  const { maxTokens = 500, temperature = 0.6, format = false, userId } = opts;
+  const { maxTokens = 1000, temperature = 0.6, format = false, userId } = opts;
 
   const provider = getProvider();
   console.log(`[LLM] Provider: ${provider.toUpperCase()}`);
