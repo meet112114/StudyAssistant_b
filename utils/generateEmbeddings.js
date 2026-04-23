@@ -39,7 +39,11 @@ export const extractTextFromFile = async (filePathOrUrl, fileType) => {
     try {
         let fileBuffer;
         if (filePathOrUrl.startsWith("http://") || filePathOrUrl.startsWith("https://")) {
-            const response = await fetch(filePathOrUrl);
+            const response = await fetch(filePathOrUrl, {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                }
+            });
             if (!response.ok) throw new Error(`Failed to fetch remote file: ${response.statusText}`);
             const arrayBuffer = await response.arrayBuffer();
             fileBuffer = Buffer.from(arrayBuffer);
