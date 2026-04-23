@@ -114,14 +114,21 @@ const getSummary = async (req, res) => {
 const getQuiz = async (req, res) => {
     try {
         const { id } = req.params;
+        const { difficulty = 'medium', numQuestions = 10, regenerate } = req.query;
         const resource = await Resource.findOne({ _id: id, user: req.user._id });
         if (!resource) return res.status(404).json({ message: "Resource not found" });
 
         let quizItem = await Quiz.findOne({ resource: id });
-        if (!quizItem) {
-            const questions = await generateQuizForResource(resource);
-            quizItem = new Quiz({ resource: id, questions });
-            await quizItem.save();
+        
+        if (!quizItem || regenerate === 'true') {
+            const questions = await generateQuizForResource(resource, difficulty, numQuestions);
+            if (quizItem) {
+                quizItem.questions = questions;
+                await quizItem.save();
+            } else {
+                quizItem = new Quiz({ resource: id, questions });
+                await quizItem.save();
+            }
         }
         res.json(quizItem);
     } catch (err) {

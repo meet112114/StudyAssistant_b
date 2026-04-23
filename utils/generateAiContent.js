@@ -130,7 +130,7 @@ Summary:`,
 /* ===============================
    QUIZ
 ================================= */
-export const generateQuizForResource = async (resourceDoc) => {
+export const generateQuizForResource = async (resourceDoc, difficulty = 'medium', numQuestions = 10) => {
   const filePath = path.join(process.cwd(), resourceDoc.url);
 
   let text = await extractTextFromFile(filePath, resourceDoc.type);
@@ -141,7 +141,6 @@ export const generateQuizForResource = async (resourceDoc) => {
 
   const truncatedText = text.slice(0, MAX_TEXT_LENGTH);
 
-  
   const quizSchema = {
     type: "object",
     properties: {
@@ -167,15 +166,7 @@ export const generateQuizForResource = async (resourceDoc) => {
   const messages = [
     {
       role: "user",
-      content: `Create exactly 10 multiple-choice questions based on the following text.
-
-Each question must have:
-- "question": the question text
-- "options": exactly 4 answer choices as strings
-- "correctAnswer": the exact text of the correct option
-
-Text:
-${truncatedText}`,
+      content: `Create exactly ${numQuestions} multiple-choice questions based on the following text.\n\nEach question must have:\n- \"question\": the question text\n- \"options\": exactly 4 answer choices as strings\n- \"correctAnswer\": the exact text of the correct option\n- The overall quiz difficulty should be: ${difficulty}\n\nText:\n${truncatedText}`,
     },
   ];
 

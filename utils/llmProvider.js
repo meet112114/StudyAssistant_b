@@ -1,3 +1,5 @@
+// Ollama is onlyfor locla use ( localhost ) , not for production
+// Use hf or openai in prod , and accesstoken and key to env 
 
 const getProvider = () =>
   (process.env.LLM_PROVIDER || "hf").trim().toLowerCase();
