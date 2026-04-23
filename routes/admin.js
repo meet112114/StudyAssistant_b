@@ -1,5 +1,5 @@
 import express from "express";
-import { getAdminDashboard, getAdminUsers } from "../controllers/adminControllers.js";
+import { getAdminDashboard, getAdminUsers, addCredits } from "../controllers/adminControllers.js";
 import verifyAuth from "../middlewares/verifyAuth.js";
 
 const router = express.Router();
@@ -15,5 +15,6 @@ const verifyAdmin = (req, res, next) => {
 
 router.get("/dashboard", verifyAuth, verifyAdmin, getAdminDashboard);
 router.get("/users", verifyAuth, verifyAdmin, getAdminUsers);
+router.post("/users/:userId/add-credits", verifyAuth, verifyAdmin, addCredits);
 
 export default router;

@@ -68,3 +68,41 @@ export const getAdminUsers = async (req, res) => {
         res.status(500).json({ message: "Server error fetching users" });
     }
 };
+
+// POST /admin/users/:userId/add-credits
+export const addCredits = async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const { amountRs } = req.body;
+
+        if (!amountRs || amountRs <= 0) {
+            return res.status(400).json({ message: "Invalid amount" });
+        }
+
+        const creditsToAdd = amountRs * 500; // 1 Rs = 500 credits
+
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+
+        if (!user.credits) {
+            user.credits = { balance: 0, totalPurchased: 0, totalUsed: 0 };
+        }
+
+        user.credits.balance = (user.credits.balance || 0) + creditsToAdd;
+        user.credits.totalPurchased = (user.credits.totalPurchased || 0) + creditsToAdd;
+        
+        await user.save();
+
+        res.json({ 
+            message: "Credits added successfully", 
+            creditsAdded: creditsToAdd, 
+            newBalance: user.credits.balance,
+            totalPurchased: user.credits.totalPurchased
+        });
+    } catch (err) {
+        console.error("Error in addCredits:", err);
+        res.status(500).json({ message: "Server error adding credits" });
+    }
+};

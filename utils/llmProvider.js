@@ -14,8 +14,8 @@ const getOllamaTokenMultiplier = () =>
 
 export const CREDIT_RATE = {
   USD_TO_INR: 93,
-  ACCOUNT_OVERHEAD: 1.2, 
-  PROFIT_MARGIN: 0.4, 
+  ACCOUNT_OVERHEAD: 1.3,
+  PROFIT_MARGIN: 0.5,
 
   PROVIDERS: {
     openai: {
@@ -118,7 +118,7 @@ const callOpenAI = async (messages, maxTokens, temperature) => {
       outputTokens: result.usage?.completion_tokens || 0,
     },
   };
-  
+
   console.log("Input token : ", usage.inputTokens);
   console.log("Output token : ", usage.outputTokens);
 };
@@ -171,8 +171,8 @@ const callOllama = async (
   if (thinking) {
     console.warn(
       `[Ollama] done_reason="${data.done_reason}" — content was empty, ` +
-        `using thinking field as response. Consider raising OLLAMA_TOKEN_MULTIPLIER ` +
-        `(currently ${getOllamaTokenMultiplier()}) in .env.`,
+      `using thinking field as response. Consider raising OLLAMA_TOKEN_MULTIPLIER ` +
+      `(currently ${getOllamaTokenMultiplier()}) in .env.`,
     );
     return { content: thinking, usage };
   }
@@ -180,7 +180,7 @@ const callOllama = async (
   console.error("[Ollama] Full raw response:", JSON.stringify(data, null, 2));
   throw new Error(
     `Ollama returned empty content AND empty thinking. Model: "${getOllamaModel()}". ` +
-      `Ensure it is pulled and running correctly.`,
+    `Ensure it is pulled and running correctly.`,
   );
 };
 
