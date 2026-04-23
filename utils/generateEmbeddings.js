@@ -89,16 +89,24 @@ export const chunkText = (text) => {
     return chunks;
 };
 
-export const processAndCreateEmbeddings = async (resourceDoc) => {
+export const processAndCreateEmbeddings = async (resourceDoc, localFilePath = null, deleteAfter = false) => {
     try {
         console.log(`Starting real embedding generation for resource: ${resourceDoc.name}`);
 
-        let targetPath = resourceDoc.url;
+        let targetPath = localFilePath || resourceDoc.url;
         if (!targetPath.startsWith("http://") && !targetPath.startsWith("https://")) {
-            targetPath = path.join(process.cwd(), targetPath);
+            targetPath = path.isAbsolute(targetPath) ? targetPath : path.join(process.cwd(), targetPath);
         }
 
         const extractedText = await extractTextFromFile(targetPath, resourceDoc.type);
+
+        if (deleteAfter && localFilePath) {
+            fs.unlink(localFilePath, (err) => {
+                if (err) console.error("Error deleting local file after extraction:", err);
+                else console.log(`Deleted local file: ${localFilePath}`);
+            });
+        }
+
         if (!extractedText || extractedText.trim().length === 0) {
             console.warn("No text could be extracted from this resource.");
             return;

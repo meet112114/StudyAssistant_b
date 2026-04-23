@@ -40,6 +40,7 @@ const addResource = async (req, res) => {
         let finalUrl = `/resources/${req.file.filename}`;
         
         const isProd = process.env.NODE_ENV === 'production' || (req.hostname !== 'localhost' && req.hostname !== '127.0.0.1');
+        let deleteLocalFile = false;
 
         if (isProd) {
             try {
@@ -59,8 +60,7 @@ const addResource = async (req, res) => {
                     ? cloudinary.url(result.public_id, { secure: true, sign_url: true, resource_type: 'image', format: 'pdf' })
                     : result.secure_url;
                 
-                // Optionally remove local file after upload to save space
-                fs.unlinkSync(req.file.path);
+                deleteLocalFile = true;
             } catch (cloudErr) {
                 console.error("Cloudinary upload failed:", cloudErr);
                 // Fallback to local if cloud fails
@@ -80,7 +80,7 @@ const addResource = async (req, res) => {
 
         await Subject.findByIdAndUpdate(subjectId, { $push: { resources: resource._id } });
 
-        processAndCreateEmbeddings(resource);
+        processAndCreateEmbeddings(resource, req.file.path, deleteLocalFile);
 
         res.status(201).json(resource);
     } catch (err) {
