@@ -5,6 +5,7 @@ import Resource from "../models/Resource.js";
 import Subject from "../models/Subject.js";
 import Summary from "../models/Summary.js";
 import Quiz from "../models/Quiz.js";
+import Embedding from "../models/Embedding.js";
 import { processAndCreateEmbeddings } from "../utils/generateEmbeddings.js";
 import { generateSummaryForResource, generateQuizForResource } from "../utils/generateAiContent.js";
 
@@ -171,4 +172,50 @@ const getQuiz = async (req, res) => {
     }
 };
 
-export { addResource, getResources, getResourceById, getSummary, getQuiz };
+const deleteResource = async (req, res) => {
+    try {
+        const resourceId = req.params.id;
+        const resource = await Resource.findOne({ _id: resourceId, user: req.user._id });
+        
+        if (!resource) {
+            return res.status(404).json({ message: "Resource not found" });
+        }
+
+        if (resource.url.includes("res.cloudinary.com")) {
+            try {
+                const urlParts = resource.url.split('/');
+                let fileNameWithExt = urlParts[urlParts.length - 1];
+                fileNameWithExt = fileNameWithExt.split('?')[0];
+                const publicIdRaw = fileNameWithExt.replace(/\.[^/.]+$/, "");
+                const fullPublicId = `study_assistant_resources/${publicIdRaw}`;
+                const uploadType = resource.type === 'pdf' ? 'image' : 'raw';
+                
+                await cloudinary.uploader.destroy(fullPublicId, { resource_type: uploadType });
+            } catch (cloudErr) {
+                console.error("Error deleting from Cloudinary:", cloudErr);
+            }
+        } else {
+            const filePath = path.join(process.cwd(), resource.url);
+            if (fs.existsSync(filePath)) {
+                fs.unlinkSync(filePath);
+            }
+        }
+
+        await Embedding.deleteMany({ resource: resourceId });
+        await Summary.deleteMany({ resource: resourceId });
+        await Quiz.deleteMany({ resource: resourceId });
+
+        await Subject.findByIdAndUpdate(resource.subject, {
+            $pull: { resources: resourceId }
+        });
+
+        await Resource.findByIdAndDelete(resourceId);
+
+        res.json({ message: "Resource deleted successfully" });
+    } catch (err) {
+        console.error("Error deleting resource:", err);
+        res.status(500).json({ message: "Server error deleting resource" });
+    }
+};
+
+export { addResource, getResources, getResourceById, getSummary, getQuiz, deleteResource };

@@ -1,4 +1,11 @@
 import Subject from "../models/Subject.js";
+import Resource from "../models/Resource.js";
+import Embedding from "../models/Embedding.js";
+import Summary from "../models/Summary.js";
+import Quiz from "../models/Quiz.js";
+import cloudinary from "../configs/cloudinary.js";
+import fs from "fs";
+import path from "path";
 
 const getSubjects = async (req, res) => {
     try {
@@ -45,4 +52,49 @@ const getSubjectById = async (req, res) => {
     }
 };
 
-export { getSubjects, addSubject, getSubjectById };
+const deleteSubject = async (req, res) => {
+    try {
+        const subjectId = req.params.id;
+        const subject = await Subject.findOne({ _id: subjectId, user: req.user._id });
+        
+        if (!subject) {
+            return res.status(404).json({ message: "Subject not found" });
+        }
+
+        const resources = await Resource.find({ subject: subjectId });
+
+        for (let resource of resources) {
+            if (resource.url.includes("res.cloudinary.com")) {
+                try {
+                    const urlParts = resource.url.split('/');
+                    let fileNameWithExt = urlParts[urlParts.length - 1];
+                    fileNameWithExt = fileNameWithExt.split('?')[0];
+                    const publicIdRaw = fileNameWithExt.replace(/\.[^/.]+$/, "");
+                    const fullPublicId = `study_assistant_resources/${publicIdRaw}`;
+                    const uploadType = resource.type === 'pdf' ? 'image' : 'raw';
+                    await cloudinary.uploader.destroy(fullPublicId, { resource_type: uploadType });
+                } catch (cloudErr) {
+                    console.error("Error deleting from Cloudinary:", cloudErr);
+                }
+            } else {
+                const filePath = path.join(process.cwd(), resource.url);
+                if (fs.existsSync(filePath)) {
+                    fs.unlinkSync(filePath);
+                }
+            }
+            await Embedding.deleteMany({ resource: resource._id });
+            await Summary.deleteMany({ resource: resource._id });
+            await Quiz.deleteMany({ resource: resource._id });
+            await Resource.findByIdAndDelete(resource._id);
+        }
+
+        await Subject.findByIdAndDelete(subjectId);
+
+        res.json({ message: "Subject and all resources deleted successfully" });
+    } catch (err) {
+        console.error("Error deleting subject:", err);
+        res.status(500).json({ message: "Server error deleting subject" });
+    }
+};
+
+export { getSubjects, addSubject, getSubjectById, deleteSubject };
