@@ -44,10 +44,13 @@ const addResource = async (req, res) => {
         if (isProd) {
             try {
                 const uploadType = type === 'pdf' ? 'image' : 'raw';
+                const publicId = req.file.filename.replace(new RegExp(`\\.${type}$`, 'i'), '');
                 const result = await cloudinary.uploader.upload(req.file.path, {
                     resource_type: uploadType,
                     folder: "study_assistant_resources",
-                    public_id: req.file.filename
+                    public_id: publicId,
+                    type: 'upload',
+                    ...(type === 'pdf' && { format: 'pdf' })
                 });
                 finalUrl = result.secure_url;
                 
