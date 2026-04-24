@@ -95,7 +95,7 @@ UserSchema.methods.addCredits = async function (amountInRs, description = "Manua
   return this.save();
 };
 
-// Deduct credits after AI usage (pass total tokens used)
+// Deduct credits after AI usage (pass total tokens used) safely handling concurrent requests
 UserSchema.methods.deductCredits = async function (tokensUsed, amountInRs, description = "AI usage deduction") {
   if (typeof amountInRs === 'string') {
     description = amountInRs;
@@ -104,21 +104,37 @@ UserSchema.methods.deductCredits = async function (tokensUsed, amountInRs, descr
     amountInRs = tokensUsed / 500;
   }
 
-  // We now allow balance to go negative so the transaction is recorded.
-  // The pre-check in llmProvider.js will prevent future generations.
+  // 1. Atomic decrement to avoid read-modify-write race conditions
+  const user = await this.model('User').findByIdAndUpdate(
+    this._id,
+    {
+      $inc: {
+        'credits.balance': -tokensUsed,
+        'credits.totalUsed': tokensUsed
+      }
+    },
+    { new: true } // Returns the updated document with the exact new balance
+  );
 
-  this.credits.balance -= tokensUsed;
-  this.credits.totalUsed += tokensUsed;
+  // 2. Add transaction log separately
+  await this.model('User').updateOne(
+    { _id: this._id },
+    {
+      $push: {
+        'credits.transactions': {
+          type: "debit",
+          amount: tokensUsed,
+          amountInRs: amountInRs, 
+          description,
+          balanceAfter: user.credits.balance,
+        }
+      }
+    }
+  );
 
-  this.credits.transactions.push({
-    type: "debit",
-    amount: tokensUsed,
-    amountInRs: amountInRs, 
-    description,
-    balanceAfter: this.credits.balance,
-  });
-
-  return this.save();
+  // Sync current instance state
+  this.credits = user.credits;
+  return this;
 };
 
 // Check if user has enough credits before an AI call

@@ -3,17 +3,21 @@ const require = createRequire(import.meta.url);
 
 import fs from "fs";
 import path from "path";
-const pdfParseLib = require("pdf-parse");
-const pdfParse = pdfParseLib.default || pdfParseLib;
-import mammoth from "mammoth";
+import { fileURLToPath } from "url";
+import { Worker } from "worker_threads";
 import { HfInference } from "@huggingface/inference";
 import Embedding from "../models/Embedding.js";
 import Resource from "../models/Resource.js";
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const CHUNK_SIZE = 1000;
 const CHUNK_OVERLAP = 200;
 
-export const fetchHuggingFaceEmbeddings = async (textChunks) => {
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+export const fetchHuggingFaceEmbeddings = async (textChunks, retries = 3, delay = 2000) => {
     const hfToken = process.env.HUGGINGFACE_API_KEY;
 
     if (!hfToken) {
@@ -22,58 +26,48 @@ export const fetchHuggingFaceEmbeddings = async (textChunks) => {
 
     const hf = new HfInference(hfToken);
 
-    try {
-        const result = await hf.featureExtraction({
-            model: "sentence-transformers/all-MiniLM-L6-v2",
-            inputs: textChunks,
-        });
-
-        return result;
-    } catch (error) {
-        console.error("fetchHuggingFaceEmbeddings Error:", error);
-        throw error;
+    for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+            const result = await hf.featureExtraction({
+                model: "sentence-transformers/all-MiniLM-L6-v2",
+                inputs: textChunks,
+            });
+            return result;
+        } catch (error) {
+            console.error(`fetchHuggingFaceEmbeddings Error (Attempt ${attempt}/${retries}):`, error.message);
+            if (attempt === retries) throw error;
+            await sleep(delay * attempt); // Exponential backoff for rate limiting
+        }
     }
 };
 
 export const extractTextFromFile = async (filePathOrUrl, fileType) => {
-    try {
-        let fileBuffer;
-        if (filePathOrUrl.startsWith("http://") || filePathOrUrl.startsWith("https://")) {
-            const response = await fetch(filePathOrUrl, {
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-                }
-            });
-            if (!response.ok) throw new Error(`Failed to fetch remote file: ${response.statusText}`);
-            const arrayBuffer = await response.arrayBuffer();
-            fileBuffer = Buffer.from(arrayBuffer);
-        } else {
-            fileBuffer = fs.readFileSync(filePathOrUrl);
-        }
+    return new Promise((resolve, reject) => {
+        const isUrl = filePathOrUrl.startsWith("http://") || filePathOrUrl.startsWith("https://");
+        
+        // Spawn a background worker to avoid blocking the main event loop (CPU-intensive task)
+        const workerPath = path.join(__dirname, "../workers/pdfWorker.js");
+        const worker = new Worker(workerPath, {
+            workerData: { filePath: filePathOrUrl, fileType, isUrl }
+        });
 
-        if (fileType === "pdf") {
-            const { PDFParse } = pdfParseLib;
-            if (PDFParse) {
-                const parser = new PDFParse({ data: fileBuffer });
-                const result = await parser.getText();
-                await parser.destroy();
-                return result.text;
-            } else {
-                const result = await pdfParseLib(fileBuffer);
-                return result.text;
+        worker.on("message", (msg) => {
+            if (msg.success) resolve(msg.text);
+            else {
+                console.error("Worker extraction failed:", msg.error);
+                resolve(""); // Fallback empty
             }
-        } else if (fileType === "docx") {
-            const result = await mammoth.extractRawText({ buffer: fileBuffer });
-            return result.value;
-        } else if (fileType === "txt") {
-            return fileBuffer.toString("utf-8");
-        } else {
-            console.warn(`Unsupported extraction type: ${fileType}`);
-        }
-    } catch (error) {
-        console.error(`Error reading/extracting file: ${filePathOrUrl}`, error);
-    }
-    return "";
+        });
+
+        worker.on("error", (err) => {
+            console.error("Worker thread error:", err);
+            resolve("");
+        });
+
+        worker.on("exit", (code) => {
+            if (code !== 0) console.error(`Worker stopped with exit code ${code}`);
+        });
+    });
 };
 
 export const chunkText = (text) => {
@@ -125,21 +119,16 @@ export const processAndCreateEmbeddings = async (resourceDoc, localFilePath = nu
             const vectors = await fetchHuggingFaceEmbeddings(batch);
 
             if (vectors && Array.isArray(vectors)) {
-
-                const mongooseBatchPromises = batch.map((textChunk, index) => {
-                    const embeddingVector = vectors[index];
-
-                    const newEmbedding = new Embedding({
-                        user: resourceDoc.user,
-                        subject: resourceDoc.subject,
-                        resource: resourceDoc._id,
-                        textChunk: textChunk,
-                        embeddingVector: embeddingVector,
-                    });
-
-                    return newEmbedding.save();
-                });
-                await Promise.all(mongooseBatchPromises);
+                // Use insertMany for bulk DB insertion to avoid hitting connection limits
+                const embeddingDocs = batch.map((textChunk, index) => ({
+                    user: resourceDoc.user,
+                    subject: resourceDoc.subject,
+                    resource: resourceDoc._id,
+                    textChunk: textChunk,
+                    embeddingVector: vectors[index],
+                }));
+                
+                await Embedding.insertMany(embeddingDocs);
             }
         }
 

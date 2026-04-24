@@ -1,5 +1,5 @@
 import dotenv from "dotenv";
-dotenv.config(); // ← MUST be first, before any other imports that read process.env
+dotenv.config();
 
 import app from "./app.js";
 import { connectDB } from "./configs/db.js";

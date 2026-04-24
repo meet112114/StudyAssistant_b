@@ -20,17 +20,17 @@ const getSubjects = async (req, res) => {
 const addSubject = async (req, res) => {
     try {
         const { name } = req.body;
-        
+
         if (!name) {
             return res.status(400).json({ message: "Subject name is required" });
         }
-        
+
         const newSubject = new Subject({
             name,
             user: req.user._id,
             resources: []
         });
-        
+
         await newSubject.save();
         res.status(201).json(newSubject);
     } catch (err) {
@@ -56,14 +56,14 @@ const deleteSubject = async (req, res) => {
     try {
         const subjectId = req.params.id;
         const subject = await Subject.findOne({ _id: subjectId, user: req.user._id });
-        
+
         if (!subject) {
             return res.status(404).json({ message: "Subject not found" });
         }
 
         const resources = await Resource.find({ subject: subjectId });
 
-        for (let resource of resources) {
+        const deletePromises = resources.map(async (resource) => {
             if (resource.url.includes("res.cloudinary.com")) {
                 try {
                     const urlParts = resource.url.split('/');
@@ -86,7 +86,9 @@ const deleteSubject = async (req, res) => {
             await Summary.deleteMany({ resource: resource._id });
             await Quiz.deleteMany({ resource: resource._id });
             await Resource.findByIdAndDelete(resource._id);
-        }
+        });
+
+        await Promise.all(deletePromises);
 
         await Subject.findByIdAndDelete(subjectId);
 
