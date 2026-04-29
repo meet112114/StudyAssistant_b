@@ -18,6 +18,15 @@ import {
 
 const router = express.Router();
 
+router.get('/test-crash', async (req, res) => {
+  try {
+    throw new Error('Insufficient credits. Please recharge your account.');
+  } catch (err) {
+    console.error('Error generating/fetching quiz:', err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // ── Public routes (no auth required) ─────────────────────────────────────────
 router.get("/public", getPublicQnaSets);
 router.get("/public/:id", getPublicQnaSetById);

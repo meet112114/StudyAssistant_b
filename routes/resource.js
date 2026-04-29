@@ -1,6 +1,6 @@
 import express from "express";
 import multer from "multer";
-import { addResource, getResources, getResourceById, getSummary, getQuiz, deleteResource } from "../controllers/resourceControllers.js";
+import { addResource, getResources, getResourceById, getSummary, getQuiz, deleteResource, retryEmbedding } from "../controllers/resourceControllers.js";
 import verifyAuth from "../middlewares/verifyAuth.js";
 
 const router = express.Router();
@@ -27,5 +27,6 @@ router.get("/item/:id", verifyAuth, getResourceById);
 router.get("/item/:id/summary", verifyAuth, getSummary);
 router.get("/item/:id/quiz", verifyAuth, getQuiz);
 router.delete("/item/:id", verifyAuth, deleteResource);
+router.post("/item/:id/retry-embedding", verifyAuth, retryEmbedding);
 
 export default router;

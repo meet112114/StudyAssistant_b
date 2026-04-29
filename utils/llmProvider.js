@@ -1,5 +1,8 @@
 // Ollama is onlyfor locla use ( localhost ) , not for production
 // Use hf or openai in prod , and accesstoken and key to env 
+import User from "../models/Users.js";
+import { HfInference } from "@huggingface/inference";
+import OpenAI from "openai";
 
 const getProvider = () =>
   (process.env.LLM_PROVIDER || "hf").trim().toLowerCase();
@@ -8,15 +11,20 @@ const getHFModel = () =>
 const getOpenAIModel = () => (process.env.OPENAI_MODEL || "gpt-4o-mini").trim();
 const getOllamaModel = () => (process.env.OLLAMA_MODEL || "gemma4").trim();
 const getOllamaURL = () =>
-  (process.env.OLLAMA_URL || "http://localhost:11434/api/chat").trim();
+  (process.env.OLLAMA_URL || "http://localhost:11434/api/chat").trim()
+  ;
 const getOllamaTokenMultiplier = () =>
   parseInt(process.env.OLLAMA_TOKEN_MULTIPLIER || "4", 10);
+
+export const getCreditsPerRs = () =>
+  parseInt(process.env.CREDITS_PER_RS || "400", 10);
 
 export const CREDIT_RATE = {
   USD_TO_INR: 93,
   ACCOUNT_OVERHEAD: 1.3,
   PROFIT_MARGIN: 0.5,
 
+  // LLM (chat completion) rates per token
   PROVIDERS: {
     openai: {
       INPUT_COST_PER_TOKEN_USD: 0.00000015,
@@ -29,6 +37,18 @@ export const CREDIT_RATE = {
     ollama: {
       INPUT_COST_PER_TOKEN_USD: 0.00000015,
       OUTPUT_COST_PER_TOKEN_USD: 0.0000006,
+    },
+  },
+
+  // Embedding generation rates per token (input only)
+  EMBEDDING_PROVIDERS: {
+    openai: {
+      // text-embedding-3-small: $0.02 / 1M tokens
+      COST_PER_TOKEN_USD: 0.00000002,
+    },
+    hf: {
+      // HuggingFace Inference API: nominal $0.06 / 1M tokens
+      COST_PER_TOKEN_USD: 0.00000006,
     },
   },
 };
@@ -59,8 +79,34 @@ export const calculateCreditsUsed = (provider, inputTokens, outputTokens) => {
     outputTokens * OUTPUT_COST_PER_TOKEN_USD * USD_TO_INR * multiplier;
   const totalCostRs = inputCostRs + outputCostRs;
 
-  // 1 Rs = 500 credits  →  multiply by 500, always round up
-  const creditsUsed = Math.ceil(totalCostRs * 500);
+  const creditsPerRs = getCreditsPerRs();
+  const creditsUsed = Math.ceil(totalCostRs * creditsPerRs);
+
+  return { creditsUsed, totalCostRs: +totalCostRs.toFixed(6) };
+};
+
+/**
+ * calculateEmbeddingCredits — converts embedding token count to credits.
+ * Embeddings are input-only (no output tokens).
+ * Returns 0 for unknown/free providers.
+ *
+ * @param {string} provider  — "openai" | "hf"
+ * @param {number} tokenCount — total tokens embedded
+ * @returns {{ creditsUsed: number, totalCostRs: number }}
+ */
+export const calculateEmbeddingCredits = (provider, tokenCount) => {
+  const rates = CREDIT_RATE.EMBEDDING_PROVIDERS[provider];
+
+  // Unknown or free provider
+  if (!rates) return { creditsUsed: 0, totalCostRs: 0 };
+
+  const { USD_TO_INR, ACCOUNT_OVERHEAD, PROFIT_MARGIN } = CREDIT_RATE;
+  const multiplier = ACCOUNT_OVERHEAD * (1 + PROFIT_MARGIN);
+
+  const totalCostRs = tokenCount * rates.COST_PER_TOKEN_USD * USD_TO_INR * multiplier;
+
+  const creditsPerRs = getCreditsPerRs();
+  const creditsUsed = Math.ceil(totalCostRs * creditsPerRs);
 
   return { creditsUsed, totalCostRs: +totalCostRs.toFixed(6) };
 };
@@ -68,7 +114,6 @@ export const calculateCreditsUsed = (provider, inputTokens, outputTokens) => {
 /* ── Internal helpers ─────────────────────────────────────────────────────── */
 
 const callHF = async (messages, maxTokens, temperature) => {
-  const { HfInference } = await import("@huggingface/inference");
   const hf = new HfInference(process.env.HUGGINGFACE_API_KEY);
 
   const result = await hf.chatCompletion({
@@ -101,7 +146,6 @@ const callHF = async (messages, maxTokens, temperature) => {
 };
 
 const callOpenAI = async (messages, maxTokens, temperature) => {
-  const { default: OpenAI } = await import("openai");
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
   const result = await openai.chat.completions.create({
@@ -188,8 +232,6 @@ const callOllama = async (
 
 const updateUserStats = async (userId, provider, usage) => {
   try {
-    const { default: User } = await import("../models/Users.js");
-
     // 1. Always update raw token counters
     await User.updateOne(
       { _id: userId },
@@ -248,7 +290,6 @@ export const chatCompletion = async (messages, opts = {}) => {
   // PRE-CHECK: Block generation if user has no credits (except for free providers)
   if (userId && provider !== "ollama") {
     try {
-      const { default: User } = await import("../models/Users.js");
       const user = await User.findById(userId);
       if (user && user.credits.balance <= 0) {
         throw new Error("Insufficient credits. Please recharge your account.");

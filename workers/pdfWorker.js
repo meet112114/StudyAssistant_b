@@ -8,18 +8,20 @@ const pdfParse = pdfParseLib.default || pdfParseLib;
 
 async function extract() {
     try {
-        const { filePath, fileType, isUrl } = workerData;
-        let fileBuffer;
+        const { filePath, fileType, isUrl, fileBuffer: incomingBuffer } = workerData;
+        let fileBuffer = incomingBuffer;
 
-        if (isUrl) {
-            const response = await fetch(filePath, {
-                headers: { 'User-Agent': 'Mozilla/5.0' }
-            });
-            if (!response.ok) throw new Error(`Failed to fetch remote file: ${response.statusText}`);
-            const arrayBuffer = await response.arrayBuffer();
-            fileBuffer = Buffer.from(arrayBuffer);
-        } else {
-            fileBuffer = fs.readFileSync(filePath);
+        if (!fileBuffer) {
+            if (isUrl) {
+                const response = await fetch(filePath, {
+                    headers: { 'User-Agent': 'Mozilla/5.0' }
+                });
+                if (!response.ok) throw new Error(`Failed to fetch remote file: ${response.statusText}`);
+                const arrayBuffer = await response.arrayBuffer();
+                fileBuffer = Buffer.from(arrayBuffer);
+            } else {
+                fileBuffer = fs.readFileSync(filePath);
+            }
         }
 
         let text = "";

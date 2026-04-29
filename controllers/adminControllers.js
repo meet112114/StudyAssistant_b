@@ -1,6 +1,8 @@
 import User from "../models/Users.js";
 import Subject from "../models/Subject.js";
 import Resource from "../models/Resource.js";
+import Embedding from "../models/Embedding.js";
+import { getCreditsPerRs } from "../utils/llmProvider.js";
 
 // GET /admin/dashboard
 export const getAdminDashboard = async (req, res) => {
@@ -44,16 +46,22 @@ export const getAdminUsers = async (req, res) => {
             const subjectsCount = await Subject.countDocuments({ user: u._id });
             const resourcesCount = await Resource.countDocuments({ user: u._id });
 
+            const moneySpent = (u.credits?.transactions || [])
+                .filter(t => t.type === 'credit')
+                .reduce((sum, t) => sum + (t.amountInRs || 0), 0);
+
             return {
                 _id: u._id,
                 name: u.name,
                 email: u.email,
                 role: u.role,
                 isVerified: u.isVerified,
+                isBlocked: u.isBlocked || false,
                 createdAt: u.createdAt,
                 subjectsCount,
                 resourcesCount,
                 aiUsage: u.aiUsage,
+                moneySpent,
                 credits: {
                     balance: u.credits?.balance || 0,
                     totalPurchased: u.credits?.totalPurchased || 0,
@@ -79,7 +87,8 @@ export const addCredits = async (req, res) => {
             return res.status(400).json({ message: "Invalid amount" });
         }
 
-        const creditsToAdd = amountRs * 500; // 1 Rs = 500 credits
+        const creditsPerRs = getCreditsPerRs();
+        const creditsToAdd = amountRs * creditsPerRs;
 
         const user = await User.findById(userId);
         if (!user) {
@@ -104,5 +113,53 @@ export const addCredits = async (req, res) => {
     } catch (err) {
         console.error("Error in addCredits:", err);
         res.status(500).json({ message: "Server error adding credits" });
+    }
+};
+
+// PUT /admin/users/:userId/toggle-block
+export const toggleUserBlock = async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const user = await User.findById(userId);
+        if (!user) return res.status(404).json({ message: "User not found" });
+
+        if (user.role === 'admin') {
+            return res.status(403).json({ message: "Cannot block an admin user." });
+        }
+
+        user.isBlocked = !user.isBlocked;
+        await user.save();
+
+        res.json({ message: `User ${user.isBlocked ? 'blocked' : 'unblocked'} successfully.`, isBlocked: user.isBlocked });
+    } catch (err) {
+        console.error("Error in toggleUserBlock:", err);
+        res.status(500).json({ message: "Server error toggling block status" });
+    }
+};
+
+// DELETE /admin/users/:userId
+export const deleteUser = async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const user = await User.findById(userId);
+        
+        if (!user) return res.status(404).json({ message: "User not found" });
+        
+        if (user.role === 'admin') {
+            return res.status(403).json({ message: "Cannot delete an admin user." });
+        }
+
+        // Cascade delete all user data
+        await Embedding.deleteMany({ user: userId });
+        await Resource.deleteMany({ user: userId });
+        await Subject.deleteMany({ user: userId });
+        // Optionally, QnASets and Summaries if they exist, assuming they have 'user' field
+        
+        await User.findByIdAndDelete(userId);
+
+        res.json({ message: "User and all associated data deleted successfully." });
+    } catch (err) {
+        console.error("Error in deleteUser:", err);
+        res.status(500).json({ message: "Server error deleting user" });
     }
 };

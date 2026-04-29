@@ -2,7 +2,7 @@
 import Embedding from "../models/Embedding.js";
 import Resource from "../models/Resource.js";
 import Subject from "../models/Subject.js";
-import { fetchHuggingFaceEmbeddings } from "../utils/generateEmbeddings.js";
+import { fetchEmbeddings } from "../utils/generateEmbeddings.js";
 import { chatCompletion } from "../utils/llmProvider.js";
 
 // Cosine similarity between two vectors
@@ -75,7 +75,7 @@ export const chat = async (req, res) => {
         // Embed the user's query
         let queryVector;
         try {
-            const embResult = await fetchHuggingFaceEmbeddings([latestUserMessage]);
+            const embResult = await fetchEmbeddings([latestUserMessage]);
             queryVector = embResult[0];
         } catch (e) {
             console.error("Query embedding failed:", e);

@@ -77,7 +77,7 @@ const deleteSubject = async (req, res) => {
                     console.error("Error deleting from Cloudinary:", cloudErr);
                 }
             } else {
-                const filePath = path.join(process.cwd(), resource.url);
+                const filePath = path.join(process.cwd(), resource.url.startsWith('/resources/') ? resource.url.substring(1) : resource.url);
                 if (fs.existsSync(filePath)) {
                     fs.unlinkSync(filePath);
                 }

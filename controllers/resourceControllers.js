@@ -39,8 +39,8 @@ const addResource = async (req, res) => {
         }
 
         let finalUrl = `/resources/${req.file.filename}`;
-        
-        const isProd = process.env.NODE_ENV === 'production' || (req.hostname !== 'localhost' && req.hostname !== '127.0.0.1');
+
+        const isProd = process.env.USE_CLOUDINARY === 'true';
         let deleteLocalFile = false;
 
         if (isProd) {
@@ -54,17 +54,15 @@ const addResource = async (req, res) => {
                     type: 'upload',
                     ...(type === 'pdf' && { format: 'pdf' })
                 });
-                
-                // Cloudinary blocks PDF delivery by default for security. 
-                // Generating a Signed URL permanently bypasses this restriction.
-                finalUrl = type === 'pdf' 
+
+                finalUrl = type === 'pdf'
                     ? cloudinary.url(result.public_id, { secure: true, sign_url: true, resource_type: 'image', format: 'pdf' })
                     : result.secure_url;
-                
+
                 deleteLocalFile = true;
             } catch (cloudErr) {
                 console.error("Cloudinary upload failed:", cloudErr);
-                // Fallback to local if cloud fails
+
             }
         }
 
@@ -136,8 +134,8 @@ const getSummary = async (req, res) => {
         res.json(summaryItem);
     } catch (err) {
         console.error("Error generating/fetching summary:", err);
-        const msg = err.message?.includes("Insufficient credits") 
-            ? err.message 
+        const msg = err.message?.includes("Insufficient credits")
+            ? err.message
             : "Server error generating summary. Check API limits or size.";
         res.status(500).json({ message: msg });
     }
@@ -151,7 +149,7 @@ const getQuiz = async (req, res) => {
         if (!resource) return res.status(404).json({ message: "Resource not found" });
 
         let quizItem = await Quiz.findOne({ resource: id });
-        
+
         if (!quizItem || regenerate === 'true') {
             const questions = await generateQuizForResource(resource, difficulty, numQuestions);
             if (quizItem) {
@@ -165,8 +163,8 @@ const getQuiz = async (req, res) => {
         res.json(quizItem);
     } catch (err) {
         console.error("Error generating/fetching quiz:", err);
-        const msg = err.message?.includes("Insufficient credits") 
-            ? err.message 
+        const msg = err.message?.includes("Insufficient credits")
+            ? err.message
             : "Server error generating quiz. Check API limits or size.";
         res.status(500).json({ message: msg });
     }
@@ -176,7 +174,7 @@ const deleteResource = async (req, res) => {
     try {
         const resourceId = req.params.id;
         const resource = await Resource.findOne({ _id: resourceId, user: req.user._id });
-        
+
         if (!resource) {
             return res.status(404).json({ message: "Resource not found" });
         }
@@ -189,13 +187,13 @@ const deleteResource = async (req, res) => {
                 const publicIdRaw = fileNameWithExt.replace(/\.[^/.]+$/, "");
                 const fullPublicId = `study_assistant_resources/${publicIdRaw}`;
                 const uploadType = resource.type === 'pdf' ? 'image' : 'raw';
-                
+
                 await cloudinary.uploader.destroy(fullPublicId, { resource_type: uploadType });
             } catch (cloudErr) {
                 console.error("Error deleting from Cloudinary:", cloudErr);
             }
         } else {
-            const filePath = path.join(process.cwd(), resource.url);
+            const filePath = path.join(process.cwd(), resource.url.startsWith('/resources/') ? resource.url.substring(1) : resource.url);
             if (fs.existsSync(filePath)) {
                 fs.unlinkSync(filePath);
             }
@@ -218,4 +216,26 @@ const deleteResource = async (req, res) => {
     }
 };
 
-export { addResource, getResources, getResourceById, getSummary, getQuiz, deleteResource };
+const retryEmbedding = async (req, res) => {
+    try {
+        const resourceId = req.params.id;
+        const resource = await Resource.findOne({ _id: resourceId, user: req.user._id });
+
+        if (!resource) {
+            return res.status(404).json({ message: "Resource not found" });
+        }
+
+        if (resource.embeddingCreated) {
+            return res.status(400).json({ message: "Embeddings already created" });
+        }
+
+        processAndCreateEmbeddings(resource);
+        
+        res.json({ message: "Embedding generation started in the background" });
+    } catch (err) {
+        console.error("Error retrying embedding:", err);
+        res.status(500).json({ message: "Server error retrying embedding" });
+    }
+};
+
+export { addResource, getResources, getResourceById, getSummary, getQuiz, deleteResource, retryEmbedding };

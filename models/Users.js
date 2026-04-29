@@ -37,12 +37,18 @@ const UserSchema = new mongoose.Schema(
       type: String,
     },
 
+    isBlocked: {
+      type: Boolean,
+      default: false,
+    },
+
     aiUsage: {
       inputTokens: { type: Number, default: 0 },
       outputTokens: { type: Number, default: 0 }
     },
     credits: {
-      balance: { type: Number, default: 20 },          // Current token balance (1 Rs = 500 credits)
+      balance: { type: Number, default: 20 },          // Current token balance
+
       totalPurchased: { type: Number, default: 0 },    // Lifetime tokens purchased
       totalUsed: { type: Number, default: 0 },         // Lifetime tokens consumed
       lastRechargedAt: { type: Date, default: null },  // Last top-up timestamp
@@ -76,9 +82,10 @@ UserSchema.methods.comparePassword = function (password) {
   return bcrypt.compare(password, this.password);
 };
 
-// Add credits when user pays (amountInRs → tokens at 1:500)
+// Add credits when user pays (amountInRs → tokens at configured ratio)
 UserSchema.methods.addCredits = async function (amountInRs, description = "Manual recharge") {
-  const tokens = amountInRs * 500; // 1 Rs = 500 tokens
+  const creditsPerRs = parseInt(process.env.CREDITS_PER_RS || "500", 10);
+  const tokens = amountInRs * creditsPerRs;
 
   this.credits.balance += tokens;
   this.credits.totalPurchased += tokens;
@@ -97,11 +104,13 @@ UserSchema.methods.addCredits = async function (amountInRs, description = "Manua
 
 // Deduct credits after AI usage (pass total tokens used) safely handling concurrent requests
 UserSchema.methods.deductCredits = async function (tokensUsed, amountInRs, description = "AI usage deduction") {
+  const creditsPerRs = parseInt(process.env.CREDITS_PER_RS || "500", 10);
+  
   if (typeof amountInRs === 'string') {
     description = amountInRs;
-    amountInRs = tokensUsed / 500;
+    amountInRs = tokensUsed / creditsPerRs;
   } else if (amountInRs === undefined) {
-    amountInRs = tokensUsed / 500;
+    amountInRs = tokensUsed / creditsPerRs;
   }
 
   // 1. Atomic decrement to avoid read-modify-write race conditions
@@ -113,7 +122,7 @@ UserSchema.methods.deductCredits = async function (tokensUsed, amountInRs, descr
         'credits.totalUsed': tokensUsed
       }
     },
-    { new: true } // Returns the updated document with the exact new balance
+    { returnDocument: 'after' } // Returns the updated document with the exact new balance
   );
 
   // 2. Add transaction log separately

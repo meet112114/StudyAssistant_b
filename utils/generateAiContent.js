@@ -172,7 +172,25 @@ export const generateQuizForResource = async (resourceDoc, difficulty = 'medium'
   const messages = [
     {
       role: "user",
-      content: `Create exactly ${numQuestions} multiple-choice questions based on the following text.\n\nEach question must have:\n- \"question\": the question text\n- \"options\": exactly 4 answer choices as strings\n- \"correctAnswer\": the exact text of the correct option\n- The overall quiz difficulty should be: ${difficulty}\n\nText:\n${truncatedText}`,
+      content: `Create exactly ${numQuestions} multiple-choice questions based on the following text.
+
+CRITICAL INSTRUCTION: You MUST return ONLY a valid JSON object containing a single array named "questions". Do not include any markdown formatting, backticks, numbering, or conversational text. Your entire response must be strictly valid JSON that can be parsed by JSON.parse().
+
+Expected JSON format:
+{
+  "questions": [
+    {
+      "question": "Question text here",
+      "options": ["Option 1", "Option 2", "Option 3", "Option 4"],
+      "correctAnswer": "Option 1"
+    }
+  ]
+}
+
+- The overall quiz difficulty should be: ${difficulty}
+
+Text:
+${truncatedText}`,
     },
   ];
 

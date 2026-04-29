@@ -19,6 +19,10 @@ const verifyAuth = async (req, res, next) => {
       return res.status(401).json({ message: "User not found" });
     }
 
+    if (user.isBlocked) {
+      return res.status(403).json({ message: "Account is temporarily blocked by admin." });
+    }
+
     req.user = user;
 
     next();

@@ -1,4 +1,4 @@
-import { fetchHuggingFaceEmbeddings } from "./generateEmbeddings.js";
+import { fetchEmbeddings } from "./generateEmbeddings.js";
 import { chatCompletion } from "./llmProvider.js";
 import Embedding from "../models/Embedding.js";
 
@@ -62,7 +62,7 @@ Return ONLY the answer text — no preamble, no labels, no "Answer:" prefix.`;
 // ── Retrieve relevant context chunks from embeddings for a query ───────────────
 const getContextChunks = async (question, resourceIds, userId) => {
   try {
-    const embResult = await fetchHuggingFaceEmbeddings([question]);
+    const embResult = await fetchEmbeddings([question]);
     const queryVector = embResult[0];
 
     const allEmbeddings = await Embedding.find({
