@@ -127,7 +127,7 @@ Summary:`,
     },
   ];
 
-  return chatCompletion(messages, { maxTokens: 500, temperature: 0.5, userId: resourceDoc.user });
+  return chatCompletion(messages, { maxTokens: 700, temperature: 0.5, userId: resourceDoc.user });
 };
 
 /* ===============================
