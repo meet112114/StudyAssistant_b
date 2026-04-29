@@ -19,7 +19,8 @@ export const createResourcePack = async (req, res) => {
                 name: res.name,
                 type: res.type,
                 size: res.size,
-                url: res.url
+                url: res.url,
+                originalResourceId: res._id
             }))
         }));
 
@@ -93,7 +94,8 @@ export const updateResourcePack = async (req, res) => {
                     name: res.name,
                     type: res.type,
                     size: res.size,
-                    url: res.url
+                    url: res.url,
+                    originalResourceId: res._id
                 }))
             }));
             pack.subjects = subjectsData;
@@ -144,15 +146,15 @@ export const cloneResourcePack = async (req, res) => {
                         type: packRes.type,
                         size: packRes.size,
                         url: packRes.url,
-                        embeddingCreated: false
+                        originalResourceId: packRes.originalResourceId,
+                        embeddingCreated: true // Uses original's embeddings
                     });
                     await newResource.save();
 
                     // Add to subject
                     await Subject.findByIdAndUpdate(userSubject._id, { $push: { resources: newResource._id } });
 
-                    // Kick off background embedding generation using the existing URL
-                    processAndCreateEmbeddings(newResource, newResource.url, false);
+                    // DO NOT call processAndCreateEmbeddings! We will use the admin's original embeddings.
                 }
             }
         }

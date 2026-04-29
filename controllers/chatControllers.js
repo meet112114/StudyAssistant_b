@@ -55,7 +55,7 @@ export const chat = async (req, res) => {
         const validResources = await Resource.find({
             _id: { $in: resourceIds },
             user: req.user._id
-        }).select("name embeddingCreated");
+        }).select("name embeddingCreated originalResourceId");
 
         if (validResources.length === 0) {
             return res.status(404).json({ message: "No valid resources found." });
@@ -85,9 +85,10 @@ export const chat = async (req, res) => {
         // Retrieve relevant chunks from embeddings
         let contextChunks = [];
         if (queryVector) {
+            const queryResourceIds = validResources.map(r => r.originalResourceId || r._id);
+            
             const allEmbeddings = await Embedding.find({
-                resource: { $in: resourceIds },
-                user: req.user._id
+                resource: { $in: queryResourceIds }
             }).select("textChunk embeddingVector resource").lean();
 
             // Score and sort

@@ -59,15 +59,23 @@ ${contextBlock}
 Return ONLY the answer text — no preamble, no labels, no "Answer:" prefix.`;
 };
 
+import Resource from "../models/Resource.js";
+
 // ── Retrieve relevant context chunks from embeddings for a query ───────────────
 const getContextChunks = async (question, resourceIds, userId) => {
   try {
     const embResult = await fetchEmbeddings([question]);
     const queryVector = embResult[0];
 
+    const validResources = await Resource.find({
+      _id: { $in: resourceIds },
+      user: userId
+    }).select("originalResourceId");
+    
+    const queryResourceIds = validResources.map(r => r.originalResourceId || r._id);
+
     const allEmbeddings = await Embedding.find({
-      resource: { $in: resourceIds },
-      user: userId,
+      resource: { $in: queryResourceIds }
     }).select("textChunk embeddingVector").lean();
 
     const scored = allEmbeddings.map((emb) => ({

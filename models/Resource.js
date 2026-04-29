@@ -38,6 +38,11 @@ const ResourceSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    originalResourceId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Resource",
+      default: null
+    },
   },
   { timestamps: true }
 );

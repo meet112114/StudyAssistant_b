@@ -16,6 +16,7 @@ const ResourcePackSchema = new mongoose.Schema(
             type: { type: String, enum: ["pdf", "docx", "txt"], required: true },
             size: { type: Number, required: true },
             url: { type: String, required: true },
+            originalResourceId: { type: mongoose.Schema.Types.ObjectId, ref: "Resource" },
           }
         ]
       }
