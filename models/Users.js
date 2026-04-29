@@ -42,16 +42,21 @@ const UserSchema = new mongoose.Schema(
       default: false,
     },
 
+    rollNumber: {
+      type: String,
+      trim: true,
+    },
+
     aiUsage: {
       inputTokens: { type: Number, default: 0 },
       outputTokens: { type: Number, default: 0 }
     },
     credits: {
-      balance: { type: Number, default: 20 },          // Current token balance
+      balance: { type: Number, default: -1 },         
 
-      totalPurchased: { type: Number, default: 0 },    // Lifetime tokens purchased
-      totalUsed: { type: Number, default: 0 },         // Lifetime tokens consumed
-      lastRechargedAt: { type: Date, default: null },  // Last top-up timestamp
+      totalPurchased: { type: Number, default: 0 },   
+      totalUsed: { type: Number, default: 0 },        
+      lastRechargedAt: { type: Date, default: null },  
 
       transactions: [
         {

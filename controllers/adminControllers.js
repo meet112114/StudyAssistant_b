@@ -40,7 +40,7 @@ export const getAdminDashboard = async (req, res) => {
 export const getAdminUsers = async (req, res) => {
     try {
         const users = await User.find({}).lean();
-        
+
         // Populate subject count and resource count per user
         const usersWithStats = await Promise.all(users.map(async (u) => {
             const subjectsCount = await Subject.countDocuments({ user: u._id });
@@ -55,6 +55,7 @@ export const getAdminUsers = async (req, res) => {
                 name: u.name,
                 email: u.email,
                 role: u.role,
+                rollNumber: u.rollNumber,
                 isVerified: u.isVerified,
                 isBlocked: u.isBlocked || false,
                 createdAt: u.createdAt,
@@ -101,12 +102,12 @@ export const addCredits = async (req, res) => {
 
         user.credits.balance = (user.credits.balance || 0) + creditsToAdd;
         user.credits.totalPurchased = (user.credits.totalPurchased || 0) + creditsToAdd;
-        
+
         await user.save();
 
-        res.json({ 
-            message: "Credits added successfully", 
-            creditsAdded: creditsToAdd, 
+        res.json({
+            message: "Credits added successfully",
+            creditsAdded: creditsToAdd,
             newBalance: user.credits.balance,
             totalPurchased: user.credits.totalPurchased
         });
@@ -142,9 +143,9 @@ export const deleteUser = async (req, res) => {
     try {
         const { userId } = req.params;
         const user = await User.findById(userId);
-        
+
         if (!user) return res.status(404).json({ message: "User not found" });
-        
+
         if (user.role === 'admin') {
             return res.status(403).json({ message: "Cannot delete an admin user." });
         }
@@ -154,12 +155,39 @@ export const deleteUser = async (req, res) => {
         await Resource.deleteMany({ user: userId });
         await Subject.deleteMany({ user: userId });
         // Optionally, QnASets and Summaries if they exist, assuming they have 'user' field
-        
+
         await User.findByIdAndDelete(userId);
 
         res.json({ message: "User and all associated data deleted successfully." });
     } catch (err) {
         console.error("Error in deleteUser:", err);
         res.status(500).json({ message: "Server error deleting user" });
+    }
+};
+
+// PUT /admin/users/:userId/verify
+export const verifyUser = async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const user = await User.findById(userId);
+        if (!user) return res.status(404).json({ message: "User not found" });
+
+        if (user.isVerified) {
+            return res.status(400).json({ message: "User is already verified." });
+        }
+
+        user.isVerified = true;
+        if (!user.credits) {
+            user.credits = { balance: 0, totalPurchased: 0, totalUsed: 0 };
+        }
+
+        user.credits.balance = 1000;
+
+        await user.save();
+
+        res.json({ message: "User verified successfully." });
+    } catch (err) {
+        console.error("Error in verifyUser:", err);
+        res.status(500).json({ message: "Server error verifying user" });
     }
 };

@@ -119,7 +119,12 @@ export const generateSummaryForResource = async (resourceDoc) => {
     {
       role: "user",
       content: `You are an educational assistant.
-Provide a concise, clear, and comprehensive summary:
+
+      Generate a COMPLETE summary in 300-400 words.
+      Do NOT stop mid-sentence.
+      Ensure the summary ends properly and covers all key points.
+
+      Provide a concise, clear, and comprehensive summary:
 
 ${truncatedText}
 
@@ -127,7 +132,7 @@ Summary:`,
     },
   ];
 
-  return chatCompletion(messages, { maxTokens: 700, temperature: 0.5, userId: resourceDoc.user });
+  return chatCompletion(messages, { maxTokens: 1000, temperature: 0.5, userId: resourceDoc.user });
 };
 
 /* ===============================
@@ -195,7 +200,7 @@ ${truncatedText}`,
   ];
 
   const result = await chatCompletion(messages, {
-    maxTokens: 3000,
+    maxTokens: 5000,
     temperature: 0.2,
     format: quizSchema,
     userId: resourceDoc.user,

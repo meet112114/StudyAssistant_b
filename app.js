@@ -42,6 +42,10 @@ app.get('/' , (req , res )=>{
     res.json({message:"App is running "})
 })
 
+app.get('/health', (req, res) => {
+    res.status(200).json({ status: "ok" });
+});
+
 app.use('/auth', authRoutes)
 app.use('/subject', subjectRoutes)
 app.use('/subjects', subjectRoutes)

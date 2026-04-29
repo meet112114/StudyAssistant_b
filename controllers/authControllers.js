@@ -10,7 +10,7 @@ const generateToken = (id) => {
 
 const register = async(req , res) =>{
     try {
-        const { email, password, name , role } = req.body;
+        const { email, password, name , role, rollNumber } = req.body;
 
         if (!email || !password) {
             return res.status(400).json({ message: 'Email and password are required' });
@@ -29,13 +29,13 @@ const register = async(req , res) =>{
             return res.status(409).json({ message: 'An account with this email already exists' });
         }
 
-        const user = new User({ email, password, name: name || '' , role });
+        const user = new User({ email, password, name: name || '' , role, rollNumber });
         await user.save();
 
         const token = generateToken(user._id);
         res.status(201).json({
             token,
-            user: { id: user._id, email: user.email, name: user.name, role: user.role },
+            user: { id: user._id, email: user.email, name: user.name, role: user.role, isVerified: user.isVerified },
         });
     } catch (err) {
         console.error('Register error:', err);
@@ -64,7 +64,7 @@ const login = async(req , res) => {
         const token = generateToken(user._id);
         res.json({
             token,
-            user: { id: user._id, email: user.email, name: user.name, role: user.role },
+            user: { id: user._id, email: user.email, name: user.name, role: user.role, isVerified: user.isVerified },
         });
     } catch (err) {
         console.error('Login error:', err);
