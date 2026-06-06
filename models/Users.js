@@ -30,7 +30,7 @@ const UserSchema = new mongoose.Schema(
 
     isVerified: {
       type: Boolean,
-      default: false,
+      default: True,
     },
 
     avatar: {
@@ -52,11 +52,11 @@ const UserSchema = new mongoose.Schema(
       outputTokens: { type: Number, default: 0 }
     },
     credits: {
-      balance: { type: Number, default: -1 },         
+      balance: { type: Number, default: 1000 },
 
-      totalPurchased: { type: Number, default: 0 },   
-      totalUsed: { type: Number, default: 0 },        
-      lastRechargedAt: { type: Date, default: null },  
+      totalPurchased: { type: Number, default: 0 },
+      totalUsed: { type: Number, default: 0 },
+      lastRechargedAt: { type: Date, default: null },
 
       transactions: [
         {
@@ -110,7 +110,7 @@ UserSchema.methods.addCredits = async function (amountInRs, description = "Manua
 // Deduct credits after AI usage (pass total tokens used) safely handling concurrent requests
 UserSchema.methods.deductCredits = async function (tokensUsed, amountInRs, description = "AI usage deduction") {
   const creditsPerRs = parseInt(process.env.CREDITS_PER_RS || "500", 10);
-  
+
   if (typeof amountInRs === 'string') {
     description = amountInRs;
     amountInRs = tokensUsed / creditsPerRs;
@@ -138,7 +138,7 @@ UserSchema.methods.deductCredits = async function (tokensUsed, amountInRs, descr
         'credits.transactions': {
           type: "debit",
           amount: tokensUsed,
-          amountInRs: amountInRs, 
+          amountInRs: amountInRs,
           description,
           balanceAfter: user.credits.balance,
         }
