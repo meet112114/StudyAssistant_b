@@ -1,0 +1,11 @@
+services:
+  study-api:
+    build: .
+    container_name: study-api
+    restart: unless-stopped
+
+    ports:
+      - "5000:5000"
+
+    env_file:
+      - .env
