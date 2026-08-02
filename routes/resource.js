@@ -1,6 +1,6 @@
 import express from "express";
 import multer from "multer";
-import { addResource, getResources, getResourceById, getSummary, getQuiz, deleteResource, retryEmbedding } from "../controllers/resourceControllers.js";
+import { addResource, getResources, getResourceById, getSummary, getQuiz, deleteResource, retryEmbedding, getPublicResourceById, getPublicSummary } from "../controllers/resourceControllers.js";
 import verifyAuth from "../middlewares/verifyAuth.js";
 
 const router = express.Router();
@@ -20,6 +20,11 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage });
 
+// Public routes (unauthenticated guest access)
+router.get("/public/item/:id", getPublicResourceById);
+router.get("/public/item/:id/summary", getPublicSummary);
+
+// Authenticated routes
 router.post("/", verifyAuth, upload.single("resourceFile"), addResource);
 router.get("/:subjectId", verifyAuth, getResources);
 

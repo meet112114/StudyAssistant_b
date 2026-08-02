@@ -19,7 +19,7 @@ const getSubjects = async (req, res) => {
 
 const addSubject = async (req, res) => {
     try {
-        const { name } = req.body;
+        const { name, semester } = req.body;
 
         if (!name) {
             return res.status(400).json({ message: "Subject name is required" });
@@ -27,6 +27,7 @@ const addSubject = async (req, res) => {
 
         const newSubject = new Subject({
             name,
+            semester: semester || "MCA Sem 1",
             user: req.user._id,
             resources: []
         });
@@ -36,6 +37,34 @@ const addSubject = async (req, res) => {
     } catch (err) {
         console.error('Error adding subject:', err);
         res.status(500).json({ message: 'Server error saving subject' });
+    }
+};
+
+const getPublicSubjects = async (req, res) => {
+    try {
+        const { semester } = req.query;
+        const query = {};
+        if (semester) {
+            query.semester = semester;
+        }
+        const subjects = await Subject.find(query).populate('resources');
+        res.json(subjects);
+    } catch (err) {
+        console.error('Error fetching public subjects:', err);
+        res.status(500).json({ message: 'Server error retrieving public subjects' });
+    }
+};
+
+const getPublicSubjectById = async (req, res) => {
+    try {
+        const subject = await Subject.findById(req.params.id).populate('resources');
+        if (!subject) {
+            return res.status(404).json({ message: "Subject not found" });
+        }
+        res.json(subject);
+    } catch (err) {
+        console.error('Error fetching public subject by id:', err);
+        res.status(500).json({ message: 'Server error' });
     }
 };
 
@@ -99,4 +128,4 @@ const deleteSubject = async (req, res) => {
     }
 };
 
-export { getSubjects, addSubject, getSubjectById, deleteSubject };
+export { getSubjects, addSubject, getSubjectById, deleteSubject, getPublicSubjects, getPublicSubjectById };

@@ -238,4 +238,43 @@ const retryEmbedding = async (req, res) => {
     }
 };
 
-export { addResource, getResources, getResourceById, getSummary, getQuiz, deleteResource, retryEmbedding };
+const getPublicResourceById = async (req, res) => {
+    try {
+        const resource = await Resource.findById(req.params.id).populate("subject", "name").lean();
+        if (!resource) return res.status(404).json({ message: "Resource not found" });
+
+        const summaryItem = await Summary.findOne({ resource: resource._id });
+
+        res.json({
+            ...resource,
+            summaryData: summaryItem ? summaryItem.content : null,
+        });
+    } catch (err) {
+        console.error("Error fetching public resource:", err);
+        res.status(500).json({ message: "Server error fetching resource" });
+    }
+};
+
+const getPublicSummary = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const resource = await Resource.findById(id);
+        if (!resource) return res.status(404).json({ message: "Resource not found" });
+
+        let summaryItem = await Summary.findOne({ resource: id });
+        if (!summaryItem) {
+            const content = await generateSummaryForResource(resource);
+            summaryItem = new Summary({ resource: id, content });
+            await summaryItem.save();
+        }
+        res.json(summaryItem);
+    } catch (err) {
+        console.error("Error generating/fetching public summary:", err);
+        const msg = err.message?.includes("Insufficient credits")
+            ? err.message
+            : "Server error generating summary.";
+        res.status(500).json({ message: msg });
+    }
+};
+
+export { addResource, getResources, getResourceById, getSummary, getQuiz, deleteResource, retryEmbedding, getPublicResourceById, getPublicSummary };
