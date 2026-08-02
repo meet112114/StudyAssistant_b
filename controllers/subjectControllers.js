@@ -133,4 +133,39 @@ const deleteSubject = async (req, res) => {
     }
 };
 
-export { getSubjects, addSubject, getSubjectById, deleteSubject, getPublicSubjects, getPublicSubjectById };
+const updateSubject = async (req, res) => {
+    try {
+        const { name, semester } = req.body;
+        const subjectId = req.params.id;
+
+        const updateData = {};
+        if (name !== undefined) updateData.name = name;
+        if (semester !== undefined) updateData.semester = semester;
+
+        const subject = await Subject.findOneAndUpdate(
+            { _id: subjectId, user: req.user._id },
+            { $set: updateData },
+            { new: true }
+        ).populate('resources');
+
+        if (!subject) {
+            if (req.user.role === 'admin') {
+                const adminSubject = await Subject.findByIdAndUpdate(
+                    subjectId,
+                    { $set: updateData },
+                    { new: true }
+                ).populate('resources');
+                if (!adminSubject) return res.status(404).json({ message: "Subject not found" });
+                return res.json(adminSubject);
+            }
+            return res.status(404).json({ message: "Subject not found" });
+        }
+
+        res.json(subject);
+    } catch (err) {
+        console.error("Error updating subject:", err);
+        res.status(500).json({ message: "Server error updating subject" });
+    }
+};
+
+export { getSubjects, addSubject, getSubjectById, deleteSubject, getPublicSubjects, getPublicSubjectById, updateSubject };

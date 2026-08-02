@@ -1,5 +1,5 @@
 import express from "express";
-import { getSubjects, addSubject, getSubjectById, deleteSubject, getPublicSubjects, getPublicSubjectById } from "../controllers/subjectControllers.js";
+import { getSubjects, addSubject, getSubjectById, deleteSubject, getPublicSubjects, getPublicSubjectById, updateSubject } from "../controllers/subjectControllers.js";
 import verifyAuth from "../middlewares/verifyAuth.js";
 
 const router = express.Router();
@@ -12,6 +12,7 @@ router.get("/public/:id", getPublicSubjectById);
 router.get("/", verifyAuth, getSubjects);
 router.post("/", verifyAuth, addSubject);
 router.get("/:id", verifyAuth, getSubjectById);
+router.put("/:id", verifyAuth, updateSubject);
 router.delete("/:id", verifyAuth, deleteSubject);
 
 export default router;
