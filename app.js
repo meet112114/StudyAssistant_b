@@ -16,7 +16,8 @@ app.set('trust proxy', 1);
 
 const allowedOrigins = [
   process.env.FRONTEND_URL, 
-  process.env.FRONTEND_DOMAIN_URL, 
+  process.env.FRONTEND_DOMAIN_URL,
+  process.env.FRONTEND_DOMAIN_URL_1,
   "http://localhost:3000",         
   "http://localhost:5173",        
 ].filter(Boolean);
