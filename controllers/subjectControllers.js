@@ -3,6 +3,7 @@ import Resource from "../models/Resource.js";
 import Embedding from "../models/Embedding.js";
 import Summary from "../models/Summary.js";
 import Quiz from "../models/Quiz.js";
+import User from "../models/Users.js";
 import cloudinary from "../configs/cloudinary.js";
 import fs from "fs";
 import path from "path";
@@ -43,7 +44,11 @@ const addSubject = async (req, res) => {
 const getPublicSubjects = async (req, res) => {
     try {
         const { semester } = req.query;
-        const query = {};
+        // Find all admin user IDs so guest dashboard only shows subjects uploaded by admin accounts
+        const adminUsers = await User.find({ role: 'admin' }).select('_id');
+        const adminUserIds = adminUsers.map(u => u._id);
+
+        const query = { user: { $in: adminUserIds } };
         if (semester) {
             query.semester = semester;
         }
