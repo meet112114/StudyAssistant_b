@@ -118,19 +118,67 @@ export const generateSummaryForResource = async (resourceDoc) => {
   const messages = [
     {
       role: "user",
-      content: `You are an educational assistant.
+      content: `
+You are an expert educator and note-maker.
 
-      Generate a COMPLETE summary in 300-400 words.
-      Do NOT stop mid-sentence.
-      Ensure the summary ends properly and covers all key points.
+Your task is to convert the provided study material into well-structured study notes.
 
-      Provide a concise, clear, and comprehensive summary:
+DO NOT write a paragraph summary.
+
+Instead, create comprehensive notes that are easy to revise before an exam.
+
+Requirements:
+
+- Cover ALL important concepts from this section.
+- Do NOT omit important information.
+- Remove duplicate or repetitive content.
+- Organize information logically.
+- Use Markdown formatting.
+- Use headings and subheadings.
+- Use bullet points instead of long paragraphs.
+- Keep explanations concise but complete.
+- End naturally without cutting off.
+
+Include ONLY the sections that are applicable to the provided content.
+
+Possible sections include:
+
+# Main Topic
+
+## Subtopic
+
+### Concept
+- Key points
+- Explanation
+
+### Definition
+- Include if definitions are present.
+
+### Formula / Equation
+- Include ONLY if formulas or mathematical expressions exist.
+
+### Code
+- Include code snippets if present.
+- Explain what the code does.
+
+### Example
+- Include worked examples if available.
+
+### Important Facts
+- Mention important numbers, dates, keywords or facts.
+
+### Key Takeaways
+- Summarize the most important revision points.
+
+Do NOT invent information.
+Do NOT add sections that are not present in the document.
+
+Study Material:
 
 ${truncatedText}
-
-Summary:`,
+`,
     },
-  ];
+  ];;
 
   return chatCompletion(messages, { maxTokens: 1000, temperature: 0.5, userId: resourceDoc.user });
 };

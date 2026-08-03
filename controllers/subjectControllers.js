@@ -8,10 +8,54 @@ import cloudinary from "../configs/cloudinary.js";
 import fs from "fs";
 import path from "path";
 
+const attachSummaryFlags = async (subjectsOrSubject) => {
+    if (!subjectsOrSubject) return subjectsOrSubject;
+    const isArray = Array.isArray(subjectsOrSubject);
+    const subjects = isArray ? subjectsOrSubject : [subjectsOrSubject];
+    
+    // Find all resource IDs
+    const resourceIds = [];
+    subjects.forEach(sub => {
+        if (sub && sub.resources) {
+            sub.resources.forEach(r => {
+                if (r && r._id) {
+                    resourceIds.push(r._id);
+                }
+            });
+        }
+    });
+
+    if (resourceIds.length === 0) {
+        return subjectsOrSubject;
+    }
+
+    // Find which resources have summaries
+    const summaries = await Summary.find({ resource: { $in: resourceIds } }).select('resource');
+    const summarizedResourceIds = new Set(summaries.map(s => s.resource.toString()));
+
+    // Map subjects
+    const mapped = subjects.map(sub => {
+        const subObj = typeof sub.toObject === 'function' ? sub.toObject() : sub;
+        if (subObj.resources) {
+            subObj.resources = subObj.resources.map(r => {
+                const rObj = typeof r.toObject === 'function' ? r.toObject() : r;
+                return {
+                    ...rObj,
+                    hasSummary: summarizedResourceIds.has(rObj._id.toString())
+                };
+            });
+        }
+        return subObj;
+    });
+
+    return isArray ? mapped : mapped[0];
+};
+
 const getSubjects = async (req, res) => {
     try {
         const subjects = await Subject.find({ user: req.user._id }).populate('resources');
-        res.json(subjects);
+        const subjectsWithFlags = await attachSummaryFlags(subjects);
+        res.json(subjectsWithFlags);
     } catch (err) {
         console.error('Error fetching subjects:', err);
         res.status(500).json({ message: 'Server error retrieving subjects' });
@@ -53,7 +97,8 @@ const getPublicSubjects = async (req, res) => {
             query.semester = semester;
         }
         const subjects = await Subject.find(query).populate('resources');
-        res.json(subjects);
+        const subjectsWithFlags = await attachSummaryFlags(subjects);
+        res.json(subjectsWithFlags);
     } catch (err) {
         console.error('Error fetching public subjects:', err);
         res.status(500).json({ message: 'Server error retrieving public subjects' });
@@ -66,7 +111,8 @@ const getPublicSubjectById = async (req, res) => {
         if (!subject) {
             return res.status(404).json({ message: "Subject not found" });
         }
-        res.json(subject);
+        const subjectWithFlags = await attachSummaryFlags(subject);
+        res.json(subjectWithFlags);
     } catch (err) {
         console.error('Error fetching public subject by id:', err);
         res.status(500).json({ message: 'Server error' });
@@ -79,7 +125,8 @@ const getSubjectById = async (req, res) => {
         if (!subject) {
             return res.status(404).json({ message: "Subject not found" });
         }
-        res.json(subject);
+        const subjectWithFlags = await attachSummaryFlags(subject);
+        res.json(subjectWithFlags);
     } catch (err) {
         console.error('Error fetching subject by id:', err);
         res.status(500).json({ message: 'Server error' });
@@ -156,12 +203,14 @@ const updateSubject = async (req, res) => {
                     { new: true }
                 ).populate('resources');
                 if (!adminSubject) return res.status(404).json({ message: "Subject not found" });
-                return res.json(adminSubject);
+                const subjectWithFlags = await attachSummaryFlags(adminSubject);
+                return res.json(subjectWithFlags);
             }
             return res.status(404).json({ message: "Subject not found" });
         }
 
-        res.json(subject);
+        const subjectWithFlags = await attachSummaryFlags(subject);
+        res.json(subjectWithFlags);
     } catch (err) {
         console.error("Error updating subject:", err);
         res.status(500).json({ message: "Server error updating subject" });
