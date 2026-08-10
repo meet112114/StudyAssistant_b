@@ -158,11 +158,11 @@ Possible sections include:
 - Include ONLY if formulas or mathematical expressions exist.
 
 ### Code
-- Include code snippets if present.
+- Include code snippets if its short and very important.
 - Explain what the code does.
 
 ### Example
-- Include worked examples if available.
+- Include worked examples if available in short.
 
 ### Important Facts
 - Mention important numbers, dates, keywords or facts.
