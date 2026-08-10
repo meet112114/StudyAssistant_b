@@ -180,7 +180,7 @@ ${truncatedText}
     },
   ];;
 
-  return chatCompletion(messages, { maxTokens: 1000, temperature: 0.5, userId: resourceDoc.user });
+  return chatCompletion(messages, { maxTokens: 2000, temperature: 0.5, userId: resourceDoc.user });
 };
 
 /* ===============================
