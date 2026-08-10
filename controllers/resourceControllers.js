@@ -321,4 +321,59 @@ const generateSummary = async (req, res) => {
     }
 };
 
-export { addResource, getResources, getResourceById, getSummary, getQuiz, deleteResource, retryEmbedding, getPublicResourceById, getPublicSummary, generateSummary };
+const regenerateSummary = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // Check resource access
+        const query = { _id: id };
+
+        if (req.user.role !== "admin") {
+            query.user = req.user._id;
+        }
+
+        const resource = await Resource.findOne(query);
+
+        if (!resource) {
+            return res.status(404).json({
+                message: "Resource not found"
+            });
+        }
+
+        // Find existing summary
+        const summaryItem = await Summary.findOne({ resource: id });
+
+        if (!summaryItem) {
+            return res.status(404).json({
+                message: "No summary exists for this resource. Generate one first."
+            });
+        }
+
+        // Generate new summary
+        const content = await generateSummaryForResource(resource);
+
+        // Update existing summary
+        summaryItem.content = content;
+        summaryItem.updatedAt = new Date();
+
+        await summaryItem.save();
+
+        res.status(200).json({
+            message: "Summary regenerated successfully",
+            summary: summaryItem
+        });
+
+    } catch (err) {
+        console.error("Error regenerating summary:", err);
+
+        const msg = err.message?.includes("Insufficient credits")
+            ? err.message
+            : "Server error regenerating summary.";
+
+        res.status(500).json({
+            message: msg
+        });
+    }
+};
+
+export { addResource, getResources, getResourceById, getSummary, getQuiz, deleteResource, retryEmbedding, getPublicResourceById, getPublicSummary, generateSummary , regenerateSummary};
