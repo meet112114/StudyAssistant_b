@@ -7,6 +7,7 @@ import chatRoutes from './routes/chat.js';
 import qnaRoutes from './routes/qna.js';
 import adminRoutes from './routes/admin.js';
 import resourcePackRoutes from './routes/resourcePack.js';
+import staticItemRoutes from './routes/staticItem.js';
 import path from 'path';
 
 const app  = express()
@@ -58,8 +59,10 @@ app.use('/chat', chatRoutes)
 app.use('/qna', qnaRoutes)
 app.use('/admin', adminRoutes)
 app.use('/resource-packs', resourcePackRoutes)
+app.use('/static-items', staticItemRoutes)
 
 
 app.use('/resources', express.static(path.join(process.cwd(), 'resources')));
+app.use('/static-files', express.static(path.join(process.cwd(), 'public/static-files')));
 
 export default app ;
